@@ -123,7 +123,7 @@ async function pollLogs() {
       }
       box.scrollTop = box.scrollHeight;
       // 限制条数
-      while (box.children.length > 400) box.removeChild(box.firstChild);
+      while (box.children.length > 600) box.removeChild(box.firstChild);
     }
   } catch (_) {}
 }
@@ -135,24 +135,39 @@ function setKpi(id, val, cls) {
   el.className = "val" + (cls ? " " + cls : "");
 }
 
-function renderAccounts(accounts) {
-  const body = $("#acct-body");
-  if (!accounts || !accounts.length) {
+let _accounts = [], _page = 1, _pageSize = 20, _acctCollapsed = false;
+const _maxPage = () => Math.max(1, Math.ceil(_accounts.length / _pageSize));
+
+function renderAccountsPage() {
+  const wrap = $("#acct-wrap"), pager = $("#acct-pager"), body = $("#acct-body");
+  if (_acctCollapsed) { if (wrap) wrap.classList.add("hidden"); if (pager) pager.classList.add("hidden"); return; }
+  if (wrap) wrap.classList.remove("hidden");
+  if (!_accounts.length) {
     body.innerHTML = `<tr><td colspan="3" class="muted" style="padding:18px;">（暂无匹配安全后缀的号）</td></tr>`;
+    if (pager) pager.classList.add("hidden");
     return;
   }
-  body.innerHTML = accounts.slice(0, 300).map(a => {
+  if (pager) pager.classList.remove("hidden");
+  const start = (_page - 1) * _pageSize;
+  body.innerHTML = _accounts.slice(start, start + _pageSize).map(a => {
     const st = a.status || "-";
     const cls = st === "active" ? "active" : (st === "error" ? "error" : "inactive");
     return `<tr><td>${a.id}</td><td><span class="st-tag ${cls}">${st}</span></td><td>${escapeHtml(a.name || "")}</td></tr>`;
   }).join("");
+  const info = $("#page-info");
+  if (info) info.textContent = `第 ${_page} / ${_maxPage()} 页 · 共 ${_accounts.length} 个`;
+  const prev = $("#btn-prev"), next = $("#btn-next");
+  if (prev) prev.disabled = _page <= 1;
+  if (next) next.disabled = _page >= _maxPage();
 }
 
 function applyOverview(ov) {
   setKpi("kpi-active", ov.safe_active ?? 0, "ok");
   setKpi("kpi-total", ov.safe_total ?? 0, "accent");
   setKpi("kpi-other", ov.other_total ?? 0);
-  renderAccounts(ov.accounts || []);
+  _accounts = ov.accounts || [];
+  if (_page > _maxPage()) _page = 1;
+  renderAccountsPage();
 }
 
 async function doTestConn() {
@@ -187,6 +202,7 @@ async function silentRefresh() {
     if (r && r.ok) applyOverview(r.overview);
     const s = await api().farm_state();
     setFarmButtons(!!s.running);
+    setKpi("kpi-imported", s.imported_ok ?? 0, "accent");
     const f = $("#kpi-farm");
     if (f) { f.textContent = s.running ? "运行中" : "停止"; f.className = "val" + (s.running ? " accent" : ""); }
   } catch (_) {}
@@ -239,7 +255,10 @@ function setFarmButtons(running) {
 }
 async function doFarmStart() {
   const r = await run($("#btn-farm-start"), "启动中…", () => api().start_farm());
-  if (r && r.ok) { toast("农场循环已启动", "ok"); setKpi("kpi-farm", "运行中", "accent"); setFarmButtons(true); }
+  if (r && r.ok) {
+    toast("农场循环已启动", "ok"); setKpi("kpi-farm", "运行中", "accent"); setFarmButtons(true);
+    try { const s = await api().farm_state(); setKpi("kpi-imported", s.imported_ok ?? 0, "accent"); } catch (_) {}
+  }
   else { toast("启动失败", "bad"); }
 }
 async function doFarmStop() {
@@ -365,6 +384,13 @@ function bind() {
   $("#btn-smoke").addEventListener("click", doSmoke);
   $("#btn-farm-start").addEventListener("click", doFarmStart);
   $("#btn-farm-stop").addEventListener("click", doFarmStop);
+  $("#btn-prev")?.addEventListener("click", () => { if (_page > 1) { _page--; renderAccountsPage(); } });
+  $("#btn-next")?.addEventListener("click", () => { if (_page < _maxPage()) { _page++; renderAccountsPage(); } });
+  $("#btn-acct-collapse")?.addEventListener("click", (e) => {
+    _acctCollapsed = !_acctCollapsed;
+    e.target.textContent = _acctCollapsed ? "展开列表" : "收起";
+    renderAccountsPage();
+  });
   $("#btn-save-cfg").addEventListener("click", saveCfgFromForm);
   $("#btn-reload-cfg").addEventListener("click", loadCfgToForm);
   setInterval(pollLogs, 1500);
@@ -375,7 +401,7 @@ async function boot() {
   await refreshConnBar();
   await loadCfgToForm();
   await loadGuide();
-  try { const s = await api().farm_state(); setFarmButtons(!!s.running); if (s.running) setKpi("kpi-farm", "运行中", "accent"); } catch (_) {}
+  try { const s = await api().farm_state(); setFarmButtons(!!s.running); setKpi("kpi-imported", s.imported_ok ?? 0, "accent"); if (s.running) setKpi("kpi-farm", "运行中", "accent"); } catch (_) {}
   setInterval(silentRefresh, 60000);  // 每 60 秒静默刷新仪表盘数字
 }
 

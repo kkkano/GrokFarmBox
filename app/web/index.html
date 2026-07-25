@@ -85,8 +85,9 @@
       <div class="kpis">
         <div class="kpi"><div class="lbl">匹配后缀 · 可用</div><div class="val ok" id="kpi-active">—</div></div>
         <div class="kpi"><div class="lbl">匹配后缀 · 总计</div><div class="val accent" id="kpi-total">—</div></div>
-        <div class="kpi"><div class="lbl">其它账号 · 只读</div><div class="val" id="kpi-other">—</div></div>
+        <div class="kpi"><div class="lbl">农场成功导入</div><div class="val accent" id="kpi-imported">0</div></div>
         <div class="kpi"><div class="lbl">农场状态</div><div class="val" id="kpi-farm">停止</div></div>
+        <div class="kpi"><div class="lbl">其它账号 · 只读</div><div class="val" id="kpi-other">—</div></div>
       </div>
 
       <div class="card">
@@ -107,12 +108,20 @@
       </div>
 
       <div class="card">
-        <div class="card-title">账号列表 · 仅显示匹配安全后缀</div>
-        <div class="table-wrap">
+        <div class="card-title" style="justify-content:space-between;">
+          <span>账号列表 · 仅显示匹配安全后缀</span>
+          <button class="btn ghost sm" id="btn-acct-collapse">收起</button>
+        </div>
+        <div class="table-wrap" id="acct-wrap">
           <table class="tbl">
             <thead><tr><th style="width:70px;">ID</th><th style="width:96px;">状态</th><th><svg class="grok-ic"><use href="#grok"/></svg>账号</th></tr></thead>
             <tbody id="acct-body"><tr><td colspan="3" class="muted" style="padding:18px;">点「① 刷新概况」从服务器拉取账号列表</td></tr></tbody>
           </table>
+        </div>
+        <div class="pager" id="acct-pager">
+          <button class="btn ghost sm" id="btn-prev">‹ 上一页</button>
+          <span id="page-info" class="muted">—</span>
+          <button class="btn ghost sm" id="btn-next">下一页 ›</button>
         </div>
       </div>
 

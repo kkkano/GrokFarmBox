@@ -187,7 +187,7 @@ body {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* KPI */
-.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; margin-bottom: 14px; }
 .kpi {
   background: var(--elev); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px 20px; position: relative; overflow: hidden;
@@ -208,8 +208,10 @@ body {
 .log {
   background: #000; border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 14px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.75;
-  color: var(--text-dim); height: 200px; overflow-y: auto;
+  color: var(--text-dim); height: 280px; overflow-y: auto;
 }
+.pager { display: flex; align-items: center; gap: 14px; justify-content: center; padding: 12px 0 2px; }
+.pager .muted { font-family: var(--mono); font-size: 12px; }
 .log .ln { animation: lnIn .14s ease-out; }
 .log .ln .t { color: var(--text-mute); margin-right: 9px; }
 .log .ln.err { color: var(--bad); }
