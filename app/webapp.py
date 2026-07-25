@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -10,6 +12,23 @@ import webbrowser
 from app.web_server import create_app
 
 PORT = 8848
+LOCK_PORT = 8849  # 单实例锁端口（绑定即持有，第二个实例绑不上就退出）
+
+
+def _acquire_singleton() -> bool:
+    """绑 LOCK_PORT 作为单例锁。已占用则打开已有 UI 并退出。"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", LOCK_PORT))
+        sock.listen(1)
+        return True  # 持有锁直到进程结束
+    except OSError:
+        print(f"已有实例在跑（{LOCK_PORT} 被占），打开现有 UI 并退出。")
+        try:
+            webbrowser.open(f"http://127.0.0.1:{PORT}")
+        except Exception:
+            pass
+        sys.exit(0)
 
 
 def _find_browser() -> str:
@@ -42,6 +61,7 @@ def _open(url: str) -> None:
 
 
 def run() -> None:
+    _acquire_singleton()  # 单实例：第二个实例直接退出
     app = create_app()
     url = f"http://127.0.0.1:{PORT}"
     threading.Thread(target=_open, args=(url,), daemon=True).start()
