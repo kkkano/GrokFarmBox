@@ -38,6 +38,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "proxy": "",
     "register_count": 3,
     "register_enabled": True,
+    "register_silent": True,
     "cpa_export_enabled": True,
     "cpa_base_url": "https://cli-chat-proxy.grok.com/v1",
     "cpa_headless": False,

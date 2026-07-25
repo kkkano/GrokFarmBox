@@ -94,6 +94,7 @@ class FarmController:
                             if cfg.get("external_register_cwd")
                             else "",
                             log=log,
+                            silent=bool(cfg.get("register_silent", True)),
                         )
                     cpa_dir = Path(cfg.get("cpa_dir") or CPA_DIR)
                     # 若外部注册写到别的目录，允许配置覆盖；默认 data/cpa_auths

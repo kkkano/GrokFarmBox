@@ -26,6 +26,7 @@ def run_external_register(
     timeout_sec: int = 45 * 60,
     config_path: str = "",
     log: LogCb = None,
+    silent: bool = False,
 ) -> dict:
     """执行外部注册命令。
 
@@ -42,8 +43,9 @@ def run_external_register(
             p = Path(config_path)
             cfg = json.loads(p.read_text(encoding="utf-8"))
             cfg["register_count"] = int(count)
+            cfg["browser_silent"] = bool(silent)
             p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-            _log(log, f"已写入 register_count={count} -> {config_path}")
+            _log(log, f"已写入 register_count={count} browser_silent={bool(silent)} -> {config_path}")
         except Exception as e:
             _log(log, f"写外部 config 失败: {e}")
 
