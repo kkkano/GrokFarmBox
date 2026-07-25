@@ -336,7 +336,7 @@ function bind() {
   $("#btn-farm-stop").addEventListener("click", doFarmStop);
   $("#btn-save-cfg").addEventListener("click", saveCfgFromForm);
   $("#btn-reload-cfg").addEventListener("click", loadCfgToForm);
-  setInterval(pollLogs, 800);
+  setInterval(pollLogs, 1500);
 }
 
 async function boot() {
