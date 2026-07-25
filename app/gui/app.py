@@ -72,6 +72,8 @@ class GrokFarmApp(ctk.CTk):
     def show(self, name: str) -> None:
         page = self._pages[name]
         page.tkraise()
+        if name == "dashboard" and hasattr(page, "refresh_status"):
+            page.refresh_status()
 
 
 def run() -> None:
