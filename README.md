@@ -129,6 +129,10 @@ GrokFarmBox/
 
 仅供学习、测试与个人号池运维。请遵守 xAI / Cloudflare / 其它服务条款与当地法律。作者不对滥用后果负责。
 
+## 致谢
+
+注册浏览器自动化参考了 [AaronL725/grok-register](https://github.com/AaronL725/grok-register) —— 本项目在其基础上聚焦号池管理：sub2api 导入、测活/清理、额度监控与傻瓜式 UI。
+
 ## License
 
 MIT

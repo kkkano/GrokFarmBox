@@ -37,7 +37,7 @@ scripts\build_exe.bat
    - Base URL（如 `http://175.x.x.x` 或域名）
    - 管理员邮箱/密码
    - Grok 分组 ID、代理 ID
-   - 安全后缀（默认只动 `*@your-domain.com`）
+   - 安全后缀（例如 `*@your-domain.com`，只动这些号）
 3. 若本机已有 grok-register：
    - 外部注册命令：`C:\path\to\.venv\Scripts\python.exe grok_register_ttk.py cli`
    - 工作目录：`C:\path\to\grok-register`

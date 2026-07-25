@@ -28,7 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "sub2api_password": "",
     "sub2api_group_id": 1,
     "sub2api_proxy_id": 0,
-    "sub2api_safe_suffix": "@your-domain.com",
+    "sub2api_safe_suffix": "",
     # --- Cloudflare 临时邮箱 ---
     "cf_api_base": "",
     "cf_admin_token": "",
