@@ -57,6 +57,24 @@ def load_cpa_files(cpa_dir: Path) -> list[dict]:
     return out
 
 
+def _move_cpa_to_dead(fp) -> None:
+    """把失效 cpa 文件移到 _dead/ 子目录, 避免下次循环重复导入删除。"""
+    try:
+        src = Path(fp)
+        if not src or not src.exists():
+            return
+        dead_dir = src.parent / "_dead"
+        dead_dir.mkdir(parents=True, exist_ok=True)
+        target = dead_dir / src.name
+        i = 0
+        while target.exists():
+            i += 1
+            target = dead_dir / f"{src.stem}_dup{i}{src.suffix}"
+        src.rename(target)
+    except Exception:
+        pass
+
+
 def import_cpa_dir(
     client: Sub2ApiClient,
     cpa_dir: Path,
@@ -104,7 +122,8 @@ def import_cpa_dir(
                     client.delete_account(aid)
                     item["deleted"] = True
                     stats["deleted"] += 1
-                    _log(log, f"导入后测活失败已删: {email}")
+                    _move_cpa_to_dead(src.get("_file"))
+                    _log(log, f"导入后测活失败已删: {email} (凭证移入 _dead)")
                 else:
                     stats["imported"] += 1
                     known.add(email)
