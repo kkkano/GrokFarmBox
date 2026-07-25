@@ -50,7 +50,7 @@ function goto(page) {
   $("#page-" + page).classList.add("active");
   $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === page));
   window.scrollTo(0, 0);
-  if (page === "dashboard") refreshConnBar();
+  if (page === "dashboard") { refreshConnBar(); syncDashKillCooldown(); }
 }
 
 /* ---------------- 配置读写 ---------------- */
@@ -60,7 +60,7 @@ const CFG_KEYS = [
   "cf_api_base", "cf_admin_token", "cf_domain", "cf_auth_mode",
   "external_register_cmd", "external_register_cwd", "register_count", "proxy",
   "register_enabled", "register_silent", "cpa_export_enabled",
-  "test_concurrency", "max_tokens_probe", "auto_kill_bad", "import_test_after",
+  "test_concurrency", "max_tokens_probe", "auto_kill_bad", "kill_on_cooldown", "import_test_after",
 ];
 
 async function loadCfgToForm() {
@@ -226,13 +226,26 @@ async function doImport() {
   }
 }
 
+async function syncDashKillCooldown() {
+  try {
+    const cfg = await api().get_config();
+    const el = $("#dash-kill-cooldown");
+    if (el) el.checked = !!cfg.kill_on_cooldown;
+  } catch (_) {}
+}
+
 async function doClean() {
-  const r = await run($("#btn-clean"), "测活清理中…", () => api().clean());
-  if (r && r.ok) {
+  const koc = $("#dash-kill-cooldown")?.checked;
+  const r = await run($("#btn-clean"), "测活清理中…", () => api().clean({ kill_on_cooldown: koc }));
+  if (!r) return;
+  if (r.ok) {
     const s = r.stats;
-    toast(`清理完成：保留 ${s.kept} / 删除 ${s.deleted}`, "ok");
+    toast(`清理完成：保留 ${s.kept} / 暂停 ${s.paused || 0} / 删除 ${s.deleted}`, "ok");
+    try { await api().save_config({ kill_on_cooldown: !!koc }); } catch (_) {}  // 同步到设置页
     const ov = await api().overview().catch(() => null);
     if (ov && ov.ok) applyOverview(ov.overview);
+  } else {
+    toast("清理失败: " + (r.error || ""), "bad");
   }
 }
 

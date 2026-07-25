@@ -161,9 +161,13 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    def clean(self) -> dict:
+    def clean(self, opts: dict = None) -> dict:
         try:
-            stats = self.farm.once_clean(log=self._logcb())
+            koc = (opts or {}).get("kill_on_cooldown")
+            stats = self.farm.once_clean(
+                log=self._logcb(),
+                kill_on_cooldown=(None if koc is None else bool(koc)),
+            )
             return {"ok": True, "stats": stats}
         except Exception as e:
             return {"ok": False, "error": str(e)}

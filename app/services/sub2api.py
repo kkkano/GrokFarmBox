@@ -180,29 +180,46 @@ class Sub2ApiClient:
             )
             text = r.text or ""
         except Exception as e:
-            return {"ok": False, "text": f"timeout/err: {e}", "status": 0, "hard_fail": True}
+            # 超时/网络异常: 当冷却(保守不杀), 避免误杀慢号
+            return {"ok": False, "text": f"timeout/err: {e}", "status": 0, "hard_fail": False, "permanent": False, "cooldown": True}
         low = text.lower()
-        hard_keys = [
+        # 永久失效(权限没了/号被删): 必杀
+        permanent_keys = [
             "permission-denied",
+            "runtime has been deleted",
+            "forbidden",
+            "unauthorized",
+            "access to the chat endpoint is denied",
+        ]
+        # 冷却(额度用尽/限流): 可选杀或标记暂停
+        cooldown_keys = [
             "spending-limit",
             "payment required",
             '"code":402',
             '"status":402',
-            "runtime has been deleted",
-            "forbidden",
-            "unauthorized",
             "out of credits",
-            "access to the chat endpoint is denied",
             "quota",
+            "rate limit",
+            "rate-limit",
+            "too many requests",
         ]
+        permanent = any(k in low for k in permanent_keys) or r.status_code in (401, 403)
+        cooldown = any(k in low for k in cooldown_keys) or r.status_code in (402, 429)
         soft_ok = r.status_code < 400 and '"type":"error"' not in text.replace(" ", "")
-        hard = any(k in low for k in hard_keys) or r.status_code in (401, 402, 403)
+        ok = soft_ok and not permanent and not cooldown
         return {
-            "ok": soft_ok and not hard,
+            "ok": ok,
             "text": text[:400],
             "status": r.status_code,
-            "hard_fail": hard,
+            "hard_fail": permanent,  # 兼容旧字段: 永久失效=hard
+            "permanent": permanent,
+            "cooldown": cooldown,
         }
+
+    def set_account_status(self, account_id: int | str, status: str) -> None:
+        """设置账号状态(active/inactive/error)。冷却号可设 inactive 暂停, 不删。"""
+        self.login()
+        self._req("put", f"/api/v1/admin/accounts/{account_id}", json={"status": status})
 
     def get_usage_snapshot(self, account_id: int | str) -> dict:
         """尽量读取账号额度快照（字段因 sub2api 版本而异）。"""

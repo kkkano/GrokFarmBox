@@ -96,6 +96,7 @@
           <button class="btn primary" id="btn-overview">① 刷新概况</button>
           <button class="btn primary" id="btn-import">② 把号导入服务器</button>
           <button class="btn danger" id="btn-clean">③ 一键测活 / 杀号</button>
+          <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;color:var(--text-dim);"><input type="checkbox" id="dash-kill-cooldown" />冷却也删</label>
           <button class="btn" id="btn-quota">④ 抽样额度</button>
           <button class="btn" id="btn-smoke">⑤ 冒烟 grok-4.5</button>
           <div class="spacer"></div>
@@ -203,6 +204,7 @@
             <div class="field"><label>冒烟 token 数</label><input id="cfg-max_tokens_probe" placeholder="8" /><div class="help">free 号建议 ≤ 16，否则易 400。</div></div>
           </div>
           <label class="check"><input type="checkbox" id="cfg-auto_kill_bad" /><span class="txt">测活失败自动删号<span class="h">402/403/quota 等失效号自动从服务器删除。</span></span></label>
+          <label class="check"><input type="checkbox" id="cfg-kill_on_cooldown" /><span class="txt">冷却号也删（不勾=只标记暂停）<span class="h">额度用尽/限流的号：勾=删除，不勾=设inactive暂停等周窗口恢复。永久失效(403/permission-denied)始终删。</span></span></label>
           <label class="check"><input type="checkbox" id="cfg-import_test_after" /><span class="txt">导入时测活（占用上游，业务高峰建议关）<span class="h">关：只写入sub2api不调grok，不抢业务流量；号失效靠调用时failover+定期③清理。</span></span></label>
         </div>
       </div>

@@ -16,7 +16,7 @@ def get_api() -> Api:
 
 
 # 需要从请求 body 取一个参数的方法
-TAKES_BODY = {"save_config"}
+TAKES_BODY = {"save_config", "clean"}
 
 
 def create_app() -> Flask:

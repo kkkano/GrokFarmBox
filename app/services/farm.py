@@ -123,6 +123,7 @@ class FarmController:
                         safe_suffix=cfg.get("sub2api_safe_suffix") or "",
                         test_after=bool(cfg.get("import_test_after", False)),
                         auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
+                        kill_on_cooldown=bool(cfg.get("kill_on_cooldown", False)),
                         log=log,
                     )
                     self.state["imported_ok"] = int(self.state.get("imported_ok") or 0) + int(
@@ -171,11 +172,14 @@ class FarmController:
             safe_suffix=cfg.get("sub2api_safe_suffix") or "",
             test_after=bool(cfg.get("import_test_after", False)),
             auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
+            kill_on_cooldown=bool(cfg.get("kill_on_cooldown", False)),
             log=log,
         )
 
-    def once_clean(self, log: LogCb = None) -> dict:
+    def once_clean(self, log: LogCb = None, kill_on_cooldown: bool = None) -> dict:
         cfg = load_config()
+        if kill_on_cooldown is None:
+            kill_on_cooldown = bool(cfg.get("kill_on_cooldown", False))
         client = self._client(cfg)
         client.login()
         return clean_pool(
@@ -183,6 +187,7 @@ class FarmController:
             safe_suffix=cfg.get("sub2api_safe_suffix") or "",
             concurrency=int(cfg.get("test_concurrency") or 8),
             auto_kill=bool(cfg.get("auto_kill_bad", True)),
+            kill_on_cooldown=kill_on_cooldown,
             log=log,
         )
 

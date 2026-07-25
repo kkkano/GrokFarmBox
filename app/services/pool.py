@@ -83,6 +83,7 @@ def import_cpa_dir(
     safe_suffix: str = "",
     test_after: bool = True,
     auto_kill_bad: bool = True,
+    kill_on_cooldown: bool = True,
     log: LogCb = None,
 ) -> dict:
     """扫描 cpa 目录并导入。
@@ -119,15 +120,33 @@ def import_cpa_dir(
                 t = client.test_account(aid)
                 item["test_ok"] = t.get("ok")
                 item["test"] = t.get("text", "")[:120]
-                if auto_kill_bad and (t.get("hard_fail") or not t.get("ok")):
+                if t.get("permanent"):  # 永久失效: 必删
                     client.delete_account(aid)
                     item["deleted"] = True
                     stats["deleted"] += 1
                     _move_cpa_to_dead(src.get("_file"))
-                    _log(log, f"导入后测活失败已删: {email} (凭证移入 _dead)")
+                    _log(log, f"导入后永久失效已删: {email}")
+                elif t.get("cooldown"):  # 冷却(额度用尽/限流)
+                    if kill_on_cooldown:
+                        client.delete_account(aid)
+                        item["deleted"] = True; stats["deleted"] += 1
+                        _move_cpa_to_dead(src.get("_file"))
+                        _log(log, f"导入后冷却已删: {email}")
+                    else:
+                        client.set_account_status(aid, "inactive")
+                        stats["imported"] += 1; known.add(email)
+                        _log(log, f"导入成功(冷却暂停): {email}")
+                elif not t.get("ok"):  # 其它失败
+                    if kill_on_cooldown:
+                        client.delete_account(aid)
+                        item["deleted"] = True; stats["deleted"] += 1
+                        _move_cpa_to_dead(src.get("_file"))
+                        _log(log, f"导入后测活失败已删: {email}")
+                    else:
+                        stats["imported"] += 1; known.add(email)
+                        _log(log, f"导入成功(测活未过保留): {email}")
                 else:
-                    stats["imported"] += 1
-                    known.add(email)
+                    stats["imported"] += 1; known.add(email)
                     _log(log, f"导入成功: {email} id={aid}")
             else:
                 stats["imported"] += 1
@@ -154,13 +173,13 @@ def clean_pool(
     safe_suffix: str = "",
     concurrency: int = 8,
     auto_kill: bool = True,
+    kill_on_cooldown: bool = True,
     log: LogCb = None,
 ) -> dict:
-    """一键测活；不通则可选删除。只动 safe_suffix 账号。"""
+    """一键测活: 永久失效必删, 冷却号按 kill_on_cooldown(删/暂停), 其它失败可选删。"""
     items = client.list_accounts(platform="grok", only_suffix=safe_suffix, only_active=True)
-    _log(log, f"开始清理，active 安全账号: {len(items)}")
-    kept = 0
-    deleted = 0
+    _log(log, f"开始清理，active 安全账号: {len(items)} (冷却号{'删' if kill_on_cooldown else '标记暂停'})")
+    kept = 0; deleted = 0; paused = 0
     details = []
 
     def one(acc: dict) -> dict:
@@ -168,19 +187,34 @@ def clean_pool(
         nm = acc.get("name")
         t = client.test_account(aid)
         row = {
-            "id": aid,
-            "name": nm,
-            "ok": t.get("ok"),
-            "hard_fail": t.get("hard_fail"),
-            "status": t.get("status"),
-            "snip": (t.get("text") or "")[:100],
+            "id": aid, "name": nm, "ok": t.get("ok"),
+            "permanent": t.get("permanent"), "cooldown": t.get("cooldown"),
+            "status": t.get("status"), "snip": (t.get("text") or "")[:100],
         }
-        if auto_kill and (t.get("hard_fail") or not t.get("ok")):
+        if not auto_kill:
+            return row
+        if t.get("permanent"):  # 永久失效: 必删
             try:
-                client.delete_account(aid)
-                row["deleted"] = True
+                client.delete_account(aid); row["deleted"] = True
             except Exception as e:
                 row["delete_err"] = str(e)[:80]
+        elif t.get("cooldown"):  # 冷却(额度用尽/限流)
+            if kill_on_cooldown:
+                try:
+                    client.delete_account(aid); row["deleted"] = True
+                except Exception as e:
+                    row["delete_err"] = str(e)[:80]
+            else:
+                try:
+                    client.set_account_status(aid, "inactive"); row["paused"] = True
+                except Exception as e:
+                    row["pause_err"] = str(e)[:80]
+        elif not t.get("ok"):  # 其它失败(非永久非冷却)
+            if kill_on_cooldown:
+                try:
+                    client.delete_account(aid); row["deleted"] = True
+                except Exception as e:
+                    row["delete_err"] = str(e)[:80]
         return row
 
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
@@ -190,13 +224,12 @@ def clean_pool(
             done += 1
             row = f.result()
             details.append(row)
-            if row.get("deleted"):
-                deleted += 1
-            else:
-                kept += 1
+            if row.get("deleted"): deleted += 1
+            elif row.get("paused"): paused += 1
+            else: kept += 1
             if done % 10 == 0 or done == len(items):
-                _log(log, f"测活进度 {done}/{len(items)} 保留={kept} 删除={deleted}")
-    return {"total": len(items), "kept": kept, "deleted": deleted, "details": details}
+                _log(log, f"测活进度 {done}/{len(items)} 保留={kept} 暂停={paused} 删除={deleted}")
+    return {"total": len(items), "kept": kept, "paused": paused, "deleted": deleted, "details": details}
 
 
 def summarize_quota(
