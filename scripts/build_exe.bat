@@ -1,27 +1,83 @@
 @echo off
-chcp 65001 >nul
+setlocal
+
 cd /d "%~dp0.."
-
-echo ============================================
-echo   GrokFarmBox 打包 (PyInstaller + pywebview)
-echo ============================================
-
-if not exist .venv (
-  echo [1/4] 创建 venv...
-  python -m venv .venv
+if errorlevel 1 (
+  set "FAILED_STEP=Open the project directory"
+  goto :failed
 )
 
-call .venv\Scripts\activate.bat
-echo [2/4] 安装依赖...
-python -m pip install -U pip >nul
-pip install -r requirements.txt
+echo ============================================
+echo   GrokFarmBox EXE Builder
+echo ============================================
+echo Project: %CD%
+echo.
 
-echo [3/4] 清理旧产物...
-if exist build rmdir /s /q build
-if exist dist rmdir /s /q dist
+if not exist "requirements.txt" (
+  set "FAILED_STEP=Find requirements.txt"
+  goto :failed
+)
+if not exist "main.py" (
+  set "FAILED_STEP=Find main.py"
+  goto :failed
+)
 
-echo [4/4] 开始打包...
-pyinstaller --noconfirm --clean ^
+set "VENV_PYTHON=.venv\Scripts\python.exe"
+if not exist "%VENV_PYTHON%" goto :create_venv
+echo [1/4] Using existing virtual environment...
+goto :install_dependencies
+
+:create_venv
+echo [1/4] Creating virtual environment...
+where py >nul 2>&1
+if errorlevel 1 goto :create_with_python
+py -3 -m venv .venv
+if errorlevel 1 (
+  set "FAILED_STEP=Create the virtual environment with py"
+  goto :failed
+)
+goto :verify_venv
+
+:create_with_python
+where python >nul 2>&1
+if errorlevel 1 (
+  set "FAILED_STEP=Find Python 3.10 or newer"
+  goto :failed
+)
+python -m venv .venv
+if errorlevel 1 (
+  set "FAILED_STEP=Create the virtual environment with python"
+  goto :failed
+)
+
+:verify_venv
+if not exist "%VENV_PYTHON%" (
+  set "FAILED_STEP=Verify the virtual environment"
+  goto :failed
+)
+
+:install_dependencies
+echo [2/4] Installing dependencies...
+"%VENV_PYTHON%" -m pip install --disable-pip-version-check -r requirements.txt
+if errorlevel 1 (
+  set "FAILED_STEP=Install dependencies"
+  goto :failed
+)
+
+echo [3/4] Removing old build output...
+if exist "build" rmdir /s /q "build"
+if exist "build" (
+  set "FAILED_STEP=Remove the build directory"
+  goto :failed
+)
+if exist "dist" rmdir /s /q "dist"
+if exist "dist" (
+  set "FAILED_STEP=Remove the dist directory"
+  goto :failed
+)
+
+echo [4/4] Building GrokFarmBox.exe...
+"%VENV_PYTHON%" -m PyInstaller --noconfirm --clean ^
   --name GrokFarmBox ^
   --windowed ^
   --onedir ^
@@ -30,15 +86,28 @@ pyinstaller --noconfirm --clean ^
   --collect-all flask ^
   --hidden-import curl_cffi ^
   main.py
-
 if errorlevel 1 (
-  echo.
-  echo 打包失败。
-  exit /b 1
+  set "FAILED_STEP=Build the executable"
+  goto :failed
+)
+
+if not exist "dist\GrokFarmBox\GrokFarmBox.exe" (
+  set "FAILED_STEP=Verify the executable"
+  goto :failed
 )
 
 echo.
-echo 完成: dist\GrokFarmBox\GrokFarmBox.exe
-echo 首次运行会在 exe 同目录生成 data\
+echo Build completed successfully.
+echo Output: %CD%\dist\GrokFarmBox\GrokFarmBox.exe
+echo Runtime data will be created beside the executable.
 echo.
 pause
+exit /b 0
+
+:failed
+echo.
+echo [ERROR] %FAILED_STEP% failed.
+echo Review the messages above, then press any key to close.
+echo.
+pause
+exit /b 1
