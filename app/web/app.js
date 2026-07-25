@@ -6,8 +6,16 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-const api = () => window.pywebview?.api;
-const ready = () => !!window.pywebview?.api;
+async function _apiCall(method, body) {
+  const opt = body !== undefined
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { method: "POST" };
+  const r = await fetch("/api/" + method, opt);
+  return r.json();
+}
+// Proxy 让 api().method(arg) 透明转成 POST /api/method —— 与原 pywebview 调用兼容
+const api = () => new Proxy({}, { get: (_, m) => (arg) => _apiCall(m, arg) });
+const ready = () => true;
 
 /* ---------------- toast ---------------- */
 function toast(msg, kind = "") {
@@ -341,21 +349,9 @@ function bind() {
 
 async function boot() {
   bind();
-  if (ready()) {
-    await refreshConnBar();
-    await loadCfgToForm();
-    await loadGuide();
-  } else {
-    $("#conn-msg").textContent = "（Python 后端未连接，仅前端预览）";
-    setTimeout(boot, 500);
-    return;
-  }
+  await refreshConnBar();
+  await loadCfgToForm();
+  await loadGuide();
 }
-
-window.addEventListener("pywebviewready", () => {
-  refreshConnBar();
-  loadCfgToForm();
-  loadGuide();
-});
 
 document.addEventListener("DOMContentLoaded", boot);

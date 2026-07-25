@@ -1,59 +1,52 @@
-"""pywebview 启动：加载本地前端，绑定 Python API。"""
+"""启动 Flask + 用 Chrome/Edge 的 --app 模式打开（桌面应用感，不依赖 WebView2）。"""
 from __future__ import annotations
 
-import sys
+import os
+import subprocess
 import threading
-import traceback
-from pathlib import Path
+import time
+import webbrowser
 
-import webview
+from app.web_server import create_app
 
-from app.config import ensure_dirs, load_config
-from app.web_api import Api, web_dir
+PORT = 8848
 
 
-class _App:
-    def __init__(self) -> None:
-        self.api: Api | None = None
-        self.window = None
+def _find_browser() -> str:
+    cands = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ]
+    for p in cands:
+        if os.path.exists(p):
+            return p
+    return ""
 
-    def on_loaded(self):
-        ensure_dirs()
+
+def _open(url: str) -> None:
+    time.sleep(1.2)
+    exe = _find_browser()
+    try:
+        if exe:
+            subprocess.Popen([exe, "--app=" + url, "--new-window"])
+        else:
+            webbrowser.open(url)
+    except Exception:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
 
 
 def run() -> None:
-    ensure_dirs()
-    try:
-        cfg = load_config()
-    except Exception:
-        cfg = {}
-
-    api = Api()
-
-    index = web_dir() / "index.html"
-    if not index.exists():
-        # 开发兜底
-        index = Path(__file__).resolve().parent / "web" / "index.html"
-
-    window = webview.create_window(
-        title="GrokFarmBox · 号池控制台",
-        url=str(index),
-        js_api=api,
-        width=1240,
-        height=840,
-        min_size=(960, 640),
-        text_select=True,
-    )
-    api.window = window
-
-    try:
-        webview.start(debug=False)
-    except Exception:
-        # 某些环境缺后端时给提示
-        traceback.print_exc()
-        raise
+    app = create_app()
+    url = f"http://127.0.0.1:{PORT}"
+    threading.Thread(target=_open, args=(url,), daemon=True).start()
+    app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True, use_reloader=False)
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     run()

@@ -27,7 +27,7 @@ pyinstaller --noconfirm --clean ^
   --onedir ^
   --add-data "app\web;app\web" ^
   --add-data "docs;docs" ^
-  --collect-all pywebview ^
+  --collect-all flask ^
   --hidden-import curl_cffi ^
   main.py
 
