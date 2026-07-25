@@ -31,6 +31,10 @@ class FarmController:
         }
         self._state_path = DATA_DIR / "farm_state.json"
         self._load_state()
+        # 新进程: 上次的农场线程不可能存活, 强制 running=False
+        # (否则 farm_state.json 残留 running=True 会让 UI 误判农场在跑, 按钮状态反)
+        self.state["running"] = False
+        self._save_state()
 
     def _load_state(self) -> None:
         if self._state_path.exists():
