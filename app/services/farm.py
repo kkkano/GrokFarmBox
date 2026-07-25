@@ -121,7 +121,7 @@ class FarmController:
                         group_id=int(cfg.get("sub2api_group_id") or 1),
                         proxy_id=int(cfg.get("sub2api_proxy_id") or 0),
                         safe_suffix=cfg.get("sub2api_safe_suffix") or "",
-                        test_after=True,
+                        test_after=bool(cfg.get("import_test_after", False)),
                         auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
                         log=log,
                     )
@@ -169,7 +169,7 @@ class FarmController:
             group_id=int(cfg.get("sub2api_group_id") or 1),
             proxy_id=int(cfg.get("sub2api_proxy_id") or 0),
             safe_suffix=cfg.get("sub2api_safe_suffix") or "",
-            test_after=True,
+            test_after=bool(cfg.get("import_test_after", False)),
             auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
             log=log,
         )

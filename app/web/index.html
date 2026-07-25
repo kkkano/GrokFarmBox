@@ -203,6 +203,7 @@
             <div class="field"><label>冒烟 token 数</label><input id="cfg-max_tokens_probe" placeholder="8" /><div class="help">free 号建议 ≤ 16，否则易 400。</div></div>
           </div>
           <label class="check"><input type="checkbox" id="cfg-auto_kill_bad" /><span class="txt">测活失败自动删号<span class="h">402/403/quota 等失效号自动从服务器删除。</span></span></label>
+          <label class="check"><input type="checkbox" id="cfg-import_test_after" /><span class="txt">导入时测活（占用上游，业务高峰建议关）<span class="h">关：只写入sub2api不调grok，不抢业务流量；号失效靠调用时failover+定期③清理。</span></span></label>
         </div>
       </div>
 

@@ -60,7 +60,7 @@ const CFG_KEYS = [
   "cf_api_base", "cf_admin_token", "cf_domain", "cf_auth_mode",
   "external_register_cmd", "external_register_cwd", "register_count", "proxy",
   "register_enabled", "register_silent", "cpa_export_enabled",
-  "test_concurrency", "max_tokens_probe", "auto_kill_bad",
+  "test_concurrency", "max_tokens_probe", "auto_kill_bad", "import_test_after",
 ];
 
 async function loadCfgToForm() {

@@ -46,6 +46,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "external_register_cwd": "vendor/grok-register",
     # --- 农场 / 清理 ---
     "auto_kill_bad": True,
+    "import_test_after": False,  # 导入时是否测活(调grok占用上游, 业务高峰建议关, 靠failover+定期清理)
     "clean_interval_min": 120,
     "test_concurrency": 8,
     "test_model": "grok-4.5",
