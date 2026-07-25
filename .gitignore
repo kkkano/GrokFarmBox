@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# App runtime
+data/
+logs/
+*.lock
+config.json
+cpa_auths/
+accounts_*.txt
+*.pending.jsonl
+
+# Build
+build/
+dist/
+*.spec.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store

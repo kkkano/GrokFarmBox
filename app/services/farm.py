@@ -1,0 +1,203 @@
+"""农场循环：注册(可选) → 导入 sub2api → 测活 → 可选杀号。"""
+from __future__ import annotations
+
+import json
+import threading
+import time
+from pathlib import Path
+from typing import Callable, Optional
+
+from app.config import CPA_DIR, DATA_DIR, load_config, save_config
+from app.services.pool import clean_pool, import_cpa_dir, pool_overview, summarize_quota
+from app.services.register_bridge import run_external_register
+from app.services.sub2api import Sub2ApiClient
+
+LogCb = Optional[Callable[[str], None]]
+StateCb = Optional[Callable[[dict], None]]
+
+
+class FarmController:
+    def __init__(self):
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+        self.state = {
+            "running": False,
+            "loops": 0,
+            "imported_ok": 0,
+            "deleted": 0,
+            "last_error": "",
+            "updated_at": "",
+        }
+        self._state_path = DATA_DIR / "farm_state.json"
+        self._load_state()
+
+    def _load_state(self) -> None:
+        if self._state_path.exists():
+            try:
+                self.state.update(json.loads(self._state_path.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+
+    def _save_state(self) -> None:
+        self.state["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(
+            json.dumps(self.state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    def is_running(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
+    def start(self, log: LogCb = None, on_state: StateCb = None) -> None:
+        if self.is_running():
+            if log:
+                log("农场已在运行")
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._loop, args=(log, on_state), name="farm-loop", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _client(self, cfg: dict) -> Sub2ApiClient:
+        return Sub2ApiClient(
+            base=cfg["sub2api_base"],
+            email=cfg["sub2api_email"],
+            password=cfg["sub2api_password"],
+        )
+
+    def _loop(self, log: LogCb, on_state: StateCb) -> None:
+        self.state["running"] = True
+        self._save_state()
+        if log:
+            log("农场循环启动")
+        try:
+            while not self._stop.is_set():
+                cfg = load_config()
+                self.state["loops"] = int(self.state.get("loops") or 0) + 1
+                loop = self.state["loops"]
+                if log:
+                    log(f"======== LOOP {loop} ========")
+                try:
+                    client = self._client(cfg)
+                    client.login()
+                    if cfg.get("register_enabled") and cfg.get("external_register_cmd"):
+                        run_external_register(
+                            cmd=cfg["external_register_cmd"],
+                            cwd=cfg.get("external_register_cwd") or "",
+                            count=int(cfg.get("register_count") or 3),
+                            config_path=str(Path(cfg.get("external_register_cwd") or "") / "config.json")
+                            if cfg.get("external_register_cwd")
+                            else "",
+                            log=log,
+                        )
+                    cpa_dir = Path(cfg.get("cpa_dir") or CPA_DIR)
+                    # 若外部注册写到别的目录，允许配置覆盖；默认 data/cpa_auths
+                    if cfg.get("external_register_cwd"):
+                        ext = Path(cfg["external_register_cwd"]) / "cpa_auths"
+                        if ext.exists():
+                            cpa_dir = ext
+                    stats = import_cpa_dir(
+                        client=client,
+                        cpa_dir=cpa_dir,
+                        group_id=int(cfg.get("sub2api_group_id") or 1),
+                        proxy_id=int(cfg.get("sub2api_proxy_id") or 0),
+                        safe_suffix=cfg.get("sub2api_safe_suffix") or "",
+                        test_after=True,
+                        auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
+                        log=log,
+                    )
+                    self.state["imported_ok"] = int(self.state.get("imported_ok") or 0) + int(
+                        stats.get("imported") or 0
+                    )
+                    self.state["deleted"] = int(self.state.get("deleted") or 0) + int(
+                        stats.get("deleted") or 0
+                    )
+                    self.state["last_error"] = ""
+                except Exception as e:
+                    self.state["last_error"] = str(e)
+                    if log:
+                        log(f"loop 异常: {e}")
+                self._save_state()
+                if on_state:
+                    on_state(dict(self.state))
+                # 等待间隔，可被 stop 打断
+                for _ in range(30):
+                    if self._stop.is_set():
+                        break
+                    time.sleep(1)
+        finally:
+            self.state["running"] = False
+            self._save_state()
+            if on_state:
+                on_state(dict(self.state))
+            if log:
+                log("农场循环已停止")
+
+    # 单次操作封装（给 GUI 按钮用）
+    def once_import(self, log: LogCb = None) -> dict:
+        cfg = load_config()
+        client = self._client(cfg)
+        client.login()
+        cpa_dir = Path(cfg.get("cpa_dir") or CPA_DIR)
+        if cfg.get("external_register_cwd"):
+            ext = Path(cfg["external_register_cwd"]) / "cpa_auths"
+            if ext.exists():
+                cpa_dir = ext
+        return import_cpa_dir(
+            client=client,
+            cpa_dir=cpa_dir,
+            group_id=int(cfg.get("sub2api_group_id") or 1),
+            proxy_id=int(cfg.get("sub2api_proxy_id") or 0),
+            safe_suffix=cfg.get("sub2api_safe_suffix") or "",
+            test_after=True,
+            auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
+            log=log,
+        )
+
+    def once_clean(self, log: LogCb = None) -> dict:
+        cfg = load_config()
+        client = self._client(cfg)
+        client.login()
+        return clean_pool(
+            client=client,
+            safe_suffix=cfg.get("sub2api_safe_suffix") or "",
+            concurrency=int(cfg.get("test_concurrency") or 8),
+            auto_kill=bool(cfg.get("auto_kill_bad", True)),
+            log=log,
+        )
+
+    def once_overview(self) -> dict:
+        cfg = load_config()
+        client = self._client(cfg)
+        client.login()
+        return pool_overview(client, safe_suffix=cfg.get("sub2api_safe_suffix") or "")
+
+    def once_quota(self, log: LogCb = None) -> dict:
+        cfg = load_config()
+        client = self._client(cfg)
+        client.login()
+        return summarize_quota(
+            client=client,
+            safe_suffix=cfg.get("sub2api_safe_suffix") or "",
+            sample=20,
+            log=log,
+        )
+
+    def once_smoke(self) -> dict:
+        cfg = load_config()
+        client = self._client(cfg)
+        client.login()
+        keys = client.list_keys(group_id=int(cfg.get("sub2api_group_id") or 1))
+        key = next((k.get("key") for k in keys if k.get("status") == "active"), None)
+        if not key:
+            return {"ok": False, "error": "no active key in group"}
+        return client.smoke_chat(
+            api_key=key,
+            model=cfg.get("test_model") or "grok-4.5",
+            max_tokens=int(cfg.get("max_tokens_probe") or 8),
+        )

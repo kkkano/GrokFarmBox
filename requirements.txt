@@ -1,0 +1,6 @@
+customtkinter>=5.2.2
+curl_cffi>=0.13.0
+requests>=2.32.0
+Pillow>=10.0.0
+packaging>=24.0
+pyinstaller>=6.10.0
