@@ -175,6 +175,19 @@ async function doOverview() {
   if (r && r.ok) { applyOverview(r.overview); toast("概况已刷新", "ok"); }
 }
 
+// 静默自动刷新：只在仪表盘页、无按钮 loading 时，后台更新 KPI/账号列表（不打扰、不弹 toast）
+let _busy = false;
+const _origRun = run;
+run = async function (btn, label, apiFn) { _busy = true; try { return await _origRun(btn, label, apiFn); } finally { _busy = false; } };
+async function silentRefresh() {
+  if (!document.querySelector("#page-dashboard.active")) return;
+  if (_busy || !ready()) return;
+  try {
+    const r = await api().overview();
+    if (r && r.ok) applyOverview(r.overview);
+  } catch (_) {}
+}
+
 async function doImport() {
   const r = await run($("#btn-import"), "导入中…", () => api().import_cpa());
   if (r && r.ok) {
@@ -352,6 +365,7 @@ async function boot() {
   await refreshConnBar();
   await loadCfgToForm();
   await loadGuide();
+  setInterval(silentRefresh, 60000);  // 每 60 秒静默刷新仪表盘数字
 }
 
 document.addEventListener("DOMContentLoaded", boot);
