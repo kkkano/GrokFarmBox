@@ -13,15 +13,18 @@ from app.web_server import create_app
 
 PORT = 8848
 LOCK_PORT = 8849  # 单实例锁端口（绑定即持有，第二个实例绑不上就退出）
+_singleton_sock = None  # 必须持有引用, 否则函数返回后 GC 关闭 socket → 锁失效
 
 
 def _acquire_singleton() -> bool:
     """绑 LOCK_PORT 作为单例锁。已占用则打开已有 UI 并退出。"""
+    global _singleton_sock
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.bind(("127.0.0.1", LOCK_PORT))
         sock.listen(1)
-        return True  # 持有锁直到进程结束
+        _singleton_sock = sock  # 存到全局, 防止 GC 关闭, 持有锁直到进程结束
+        return True
     except OSError:
         print(f"已有实例在跑（{LOCK_PORT} 被占），打开现有 UI 并退出。")
         try:
