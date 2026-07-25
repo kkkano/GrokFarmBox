@@ -77,7 +77,7 @@ class Sub2ApiClient:
     def list_accounts(
         self,
         platform: str = "grok",
-        page_size: int = 50,
+        page_size: int = 100,
         max_pages: int = 40,
         only_suffix: str = "",
         only_active: bool = False,
@@ -89,6 +89,7 @@ class Sub2ApiClient:
             data = self._req(
                 "get",
                 f"/api/v1/admin/accounts?platform={platform}&page={page}&page_size={page_size}",
+                timeout=60,
             ).get("data") or {}
             items = data.get("items") or []
             for it in items:
