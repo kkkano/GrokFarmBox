@@ -7,7 +7,7 @@
 把「注册机产出的 OAuth 凭证」管起来：一键导入 [sub2api](https://github.com/), 验证 grokbuild、测活、可选自动清理失效号、抽样看额度；并内置 **Cloudflare 临时邮箱** 从零点击教程。
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
-![UI](https://img.shields.io/badge/UI-CustomTkinter-blue)
+![UI](https://img.shields.io/badge/UI-pywebview%20%2B%20HTML%2FCSS%2FJS-ffb347)
 ![Pack](https://img.shields.io/badge/Pack-PyInstaller-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -97,16 +97,23 @@ Cloudflare 逐步图文见 [`docs/cloudflare_temp_email.md`](docs/cloudflare_tem
 
 ```
 GrokFarmBox/
-├── main.py                 # 入口
+├── main.py                 # 入口（pywebview）
 ├── app/
 │   ├── config.py           # 配置
-│   ├── gui/                # CustomTkinter 界面
+│   ├── web/                # 前端：index.html / styles.css / app.js
+│   ├── web_api.py          # pywebview JS 桥
+│   ├── webapp.py           # 窗口启动
 │   └── services/           # sub2api / 号池 / 农场
 ├── docs/                   # 教程与用户手册
 ├── scripts/                # 打包脚本
 ├── assets/
 └── data/                   # 运行时生成（不进 git）
 ```
+
+## 界面
+
+暗色「任务控制台」美学：石墨深底 + 琥珀金主色，Unbounded 标题 + IBM Plex 工程等宽数据。
+教程页用内置零依赖 markdown 渲染器正确排版（标题 / 表格 / 代码块 / 引用 / 列表）。
 
 ---
 

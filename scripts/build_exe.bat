@@ -3,7 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0.."
 
 echo ============================================
-echo   GrokFarmBox 打包 (PyInstaller)
+echo   GrokFarmBox 打包 (PyInstaller + pywebview)
 echo ============================================
 
 if not exist .venv (
@@ -15,7 +15,6 @@ call .venv\Scripts\activate.bat
 echo [2/4] 安装依赖...
 python -m pip install -U pip >nul
 pip install -r requirements.txt
-pip install pyinstaller
 
 echo [3/4] 清理旧产物...
 if exist build rmdir /s /q build
@@ -26,10 +25,10 @@ pyinstaller --noconfirm --clean ^
   --name GrokFarmBox ^
   --windowed ^
   --onedir ^
+  --add-data "app\web;app\web" ^
   --add-data "docs;docs" ^
-  --hidden-import customtkinter ^
+  --collect-all pywebview ^
   --hidden-import curl_cffi ^
-  --collect-all customtkinter ^
   main.py
 
 if errorlevel 1 (

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GrokFarmBox · 号池控制台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <!-- 侧栏 -->
+  <aside class="nav">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-name">GrokFarmBox</div>
+      </div>
+    </div>
+    <div class="brand-sub">号池控制台</div>
+
+    <nav class="nav-items">
+      <button class="nav-btn active" data-page="dashboard">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        仪表盘
+      </button>
+      <button class="nav-btn" data-page="settings">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </button>
+      <button class="nav-btn" data-page="guide">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        CF 教程
+      </button>
+    </nav>
+
+    <div class="nav-foot">
+      只操作 <b>安全邮箱后缀</b> 匹配的账号，其它账号只读。
+    </div>
+  </aside>
+
+  <!-- 主区 -->
+  <main class="main">
+    <!-- ===== 仪表盘 ===== -->
+    <section class="page active" id="page-dashboard">
+      <div class="page-head">
+        <div class="page-title">号池 <span class="accent">仪表盘</span></div>
+        <div class="page-sub">查看连接状态，一键导入、测活、清理、监控额度。</div>
+      </div>
+
+      <!-- 连接状态条 -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">当前连接</div>
+        <div class="chips" id="conn-chips">
+          <span class="chip" id="chip-server"><span class="dot"></span> 服务器：<b>—</b></span>
+          <span class="chip" id="chip-group"><span class="dot"></span> 分组/代理：<b>—</b></span>
+          <span class="chip" id="chip-suffix"><span class="dot"></span> 安全后缀：<b>—</b></span>
+          <span class="chip" id="chip-cpa"><span class="dot"></span> 凭证目录：<b>—</b></span>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn primary sm" id="btn-test-conn">测试连接</button>
+          <button class="btn sm" id="btn-open-cpa">打开凭证目录</button>
+          <button class="btn ghost sm" id="btn-goto-settings">去设置填写</button>
+          <div class="spacer"></div>
+          <span class="muted" id="conn-msg" style="align-self:center;">点「测试连接」验证服务器是否可达</span>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpis">
+        <div class="kpi"><div class="lbl">匹配后缀 · 可用</div><div class="val ok" id="kpi-active">—</div></div>
+        <div class="kpi"><div class="lbl">匹配后缀 · 总计</div><div class="val accent" id="kpi-total">—</div></div>
+        <div class="kpi"><div class="lbl">其它账号 · 只读</div><div class="val" id="kpi-other">—</div></div>
+        <div class="kpi"><div class="lbl">农场状态</div><div class="val" id="kpi-farm">停止</div></div>
+      </div>
+
+      <!-- 操作 -->
+      <div class="card">
+        <div class="card-title">一键操作</div>
+        <div class="row">
+          <button class="btn primary" id="btn-overview">① 刷新概况</button>
+          <button class="btn primary" id="btn-import">② 把号导入服务器</button>
+          <button class="btn danger" id="btn-clean">③ 一键测活/杀号</button>
+          <button class="btn" id="btn-quota">④ 抽样额度</button>
+          <button class="btn" id="btn-smoke">⑤ 冒烟 grok-4.5</button>
+          <div class="spacer"></div>
+          <button class="btn" id="btn-farm-start">启动农场循环</button>
+          <button class="btn ghost" id="btn-farm-stop">停止农场</button>
+        </div>
+        <div class="muted" style="margin-top:10px; font-size:12px;">
+          ① 从服务器拉号池 · ② 读凭证目录写入 sub2api · ③ 测活并删失效号 · ④ 抽样看额度 · ⑤ 业务 key 冒烟
+        </div>
+      </div>
+
+      <!-- 账号列表 -->
+      <div class="card">
+        <div class="card-title">账号列表 · 仅显示匹配安全后缀</div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th style="width:70px;">ID</th><th style="width:90px;">状态</th><th>账号</th></tr></thead>
+            <tbody id="acct-body"><tr><td colspan="3" class="muted" style="padding:18px;">点「① 刷新概况」从服务器拉取账号列表</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 额度 -->
+      <div class="card">
+        <div class="card-title">额度摘要 · 抽样</div>
+        <div id="quota-box" class="muted" style="font-family:var(--mono); font-size:13px;">尚未查询（单号常见上限：21 次请求 / 100 万 token / 窗口）</div>
+      </div>
+
+      <!-- 日志 -->
+      <div class="card">
+        <div class="card-title">运行日志</div>
+        <div class="log" id="log-box"></div>
+      </div>
+    </section>
+
+    <!-- ===== 设置 ===== -->
+    <section class="page" id="page-settings">
+      <div class="page-head">
+        <div class="page-title"><span class="accent">设置</span></div>
+        <div class="page-sub">照着灰色示例填。密码只保存在本机 data/config.json，不会上传。</div>
+      </div>
+
+      <div class="banner must"><b>必填：</b>第 1 组「sub2api 服务器」。其它按需填写。</div>
+
+      <!-- 1. sub2api -->
+      <div class="card">
+        <div class="card-title">1 · sub2api 服务器 <span style="color:var(--bad); text-transform:none; letter-spacing:0; margin-left:6px;">必填</span></div>
+        <div class="form-grid">
+          <div class="form-cols">
+            <div class="field"><label>服务器地址 <span class="tag">你的 sub2api 网关</span></label><input id="cfg-sub2api_base" placeholder="http://your-server-ip" /><div class="help">带 <code>http://</code> 或 <code>https://</code>，不要末尾斜杠。</div></div>
+            <div class="field"><label>管理员邮箱</label><input id="cfg-sub2api_email" placeholder="admin@example.com" /><div class="help">登录 sub2api 后台的管理员邮箱。</div></div>
+          </div>
+          <div class="form-cols">
+            <div class="field"><label>管理员密码 <span class="tag">仅存本机</span></label><input id="cfg-sub2api_password" type="password" placeholder="登录密码" /><div class="help">后台登录密码。</div></div>
+            <div class="field"><label>安全邮箱后缀 <span class="tag">只动这些号</span></label><input id="cfg-sub2api_safe_suffix" placeholder="@your-domain.com" /><div class="help">你批量注册用的域名后缀。留空 = 管全部（谨慎）。</div></div>
+          </div>
+          <div class="form-cols">
+            <div class="field"><label>Grok 分组 ID</label><input id="cfg-sub2api_group_id" placeholder="1" /><div class="help">sub2api 后台「分组」里的 ID，grok 通常为 1。</div></div>
+            <div class="field"><label>代理 ID</label><input id="cfg-sub2api_proxy_id" placeholder="0" /><div class="help">导入后绑哪个代理，0 = 不绑定。</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. CF 邮箱 -->
+      <div class="card">
+        <div class="card-title">2 · Cloudflare 临时邮箱 <span style="color:var(--text-mute); text-transform:none; letter-spacing:0; margin-left:6px;">注册才需要</span></div>
+        <div class="form-grid">
+          <div class="form-cols">
+            <div class="field"><label>邮箱服务地址</label><input id="cfg-cf_api_base" placeholder="https://mail.yourdomain.com" /><div class="help">见「CF 教程」页部署的 Worker 地址。</div></div>
+            <div class="field"><label>邮箱管理密码 <span class="tag">Admin Token</span></label><input id="cfg-cf_admin_token" type="password" placeholder="ADMIN_PASSWORDS 的值" /><div class="help">Worker 里设置的 ADMIN_PASSWORDS。</div></div>
+          </div>
+          <div class="form-cols">
+            <div class="field"><label>邮箱域名</label><input id="cfg-cf_domain" placeholder="yourdomain.com" /><div class="help">收信域名。</div></div>
+            <div class="field"><label>鉴权方式</label><input id="cfg-cf_auth_mode" placeholder="x-admin-auth" /><div class="help">一般 <code>x-admin-auth</code>；401 则试 bearer / x-api-key / query-key / none。</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 注册 -->
+      <div class="card">
+        <div class="card-title">3 · 自动注册 <span style="color:var(--text-mute); text-transform:none; letter-spacing:0; margin-left:6px;">可选</span></div>
+        <div class="form-grid">
+          <div class="field"><label>外部注册命令</label><input id="cfg-external_register_cmd" placeholder="C:\grok-register\.venv\Scripts\python.exe grok_register_ttk.py cli" /><div class="help">想自动刷号就填本机 grok-register 启动命令；留空 = 只导入已有凭证。</div></div>
+          <div class="field"><label>外部注册工作目录</label><input id="cfg-external_register_cwd" placeholder="C:\grok-register" /><div class="help">上一条命令的运行目录。</div></div>
+          <div class="form-cols">
+            <div class="field"><label>每批注册数量</label><input id="cfg-register_count" placeholder="3" /><div class="help">浏览器自动化较慢，建议 1~5。</div></div>
+            <div class="field"><label>HTTP 代理</label><input id="cfg-proxy" placeholder="http://127.0.0.1:7897" /><div class="help">注册走的代理，不需要就留空。</div></div>
+          </div>
+          <label class="check"><input type="checkbox" id="cfg-register_enabled" /><span class="txt">农场循环启用自动注册<span class="h">勾选后启动农场会先跑外部注册命令再导入。</span></span></label>
+          <label class="check"><input type="checkbox" id="cfg-cpa_export_enabled" /><span class="txt">注册时导出 CPA 凭证<span class="h">保持勾选，导出的凭证才能被导入。</span></span></label>
+        </div>
+      </div>
+
+      <!-- 4. 清理 -->
+      <div class="card">
+        <div class="card-title">4 · 测活 / 清理 <span style="color:var(--text-mute); text-transform:none; letter-spacing:0; margin-left:6px;">一般用默认</span></div>
+        <div class="form-grid">
+          <div class="form-cols">
+            <div class="field"><label>测活并发</label><input id="cfg-test_concurrency" placeholder="8" /><div class="help">同时测几个号，建议 4~12。</div></div>
+            <div class="field"><label>冒烟 token 数</label><input id="cfg-max_tokens_probe" placeholder="8" /><div class="help">free 号建议 ≤ 16，否则易 400。</div></div>
+          </div>
+          <label class="check"><input type="checkbox" id="cfg-auto_kill_bad" /><span class="txt">测活失败自动删号<span class="h">402/403/quota 等失效号自动从服务器删除。</span></span></label>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <button class="btn primary" id="btn-save-cfg">保存设置</button>
+        <button class="btn" id="btn-reload-cfg">重新加载</button>
+        <div class="spacer"></div>
+        <span class="muted" id="cfg-msg" style="align-self:center;"></span>
+      </div>
+    </section>
+
+    <!-- ===== 教程 ===== -->
+    <section class="page" id="page-guide">
+      <div class="page-head">
+        <div class="page-title">Cloudflare <span class="accent">配置教程</span></div>
+        <div class="page-sub">按顺序点，别跳。做完把 Worker 地址 / Admin Token / 域名填到「设置」。</div>
+      </div>
+      <div class="card">
+        <div class="md" id="guide-md"><p class="muted">加载中…</p></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
