@@ -102,6 +102,7 @@ GrokFarmBox/
 │   ├── web_api.py          # Flask API 桥
 │   ├── webapp.py           # 窗口启动
 │   └── services/           # sub2api / 号池 / 农场
+├── vendor/grok-register/   # 内置注册机(基于 AaronL725/grok-register, MIT, 含静默改动)
 ├── docs/                   # 教程与用户手册
 ├── scripts/                # 打包脚本
 ├── assets/
@@ -115,11 +116,20 @@ Grok 风黑白极简：纯黑底 + 白字、白底黑字主按钮，Hanken Grote
 
 ---
 
-## 和 grok-register 的关系
+## 内置注册机 (vendor/grok-register)
 
-- **注册浏览器自动化**仍建议用成熟的 `grok-register`（DrissionPage + CPA 导出）
-- **GrokFarmBox** 负责：导入 sub2api、验证、清理、监控、教程、傻瓜 UI / EXE
-- 通过设置里的「外部注册命令」可以把两者串成一条挂机流水线
+本项目**内置** `vendor/grok-register/`（基于 [AaronL725/grok-register](https://github.com/AaronL725/grok-register)，MIT License，已含「静默注册」改动）。开箱默认调用它，无需另装。
+
+首次使用需在 vendor 里建虚拟环境装依赖：
+```bat
+cd vendor\grok-register
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+GrokFarmBox 默认配置已指向 `vendor/grok-register`，启动农场循环即可：注册（浏览器静默移屏外）→ 产出 cpa_auths → 导入 sub2api → 测活。
+
+> 也可在设置里改成外部 grok-register 路径（自己独立维护的版本）。
 
 ---
 
@@ -129,7 +139,7 @@ Grok 风黑白极简：纯黑底 + 白字、白底黑字主按钮，Hanken Grote
 
 ## 致谢
 
-注册浏览器自动化参考了 [AaronL725/grok-register](https://github.com/AaronL725/grok-register) —— 本项目在其基础上聚焦号池管理：sub2api 导入、测活/清理、额度监控与傻瓜式 UI。
+`vendor/grok-register/` 源自 [AaronL725/grok-register](https://github.com/AaronL725/grok-register)（MIT License, Copyright (c) 2026 AaronL725），完整保留原作者的 LICENSE 与代码，仅新增「静默注册（窗口移屏外）」4 行改动。GrokFarmBox 在其注册能力之上构建号池管理：sub2api 导入、测活/清理、额度监控与傻瓜式 UI。感谢 AaronL725 的开源贡献。
 
 ## License
 

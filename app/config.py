@@ -42,8 +42,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "cpa_export_enabled": True,
     "cpa_base_url": "https://cli-chat-proxy.grok.com/v1",
     "cpa_headless": False,
-    "external_register_cmd": "",  # 可选：外部注册脚本命令，空则仅导入已有 cpa
-    "external_register_cwd": "",
+    "external_register_cmd": ".venv\\Scripts\\python.exe grok_register_ttk.py cli",
+    "external_register_cwd": "vendor/grok-register",
     # --- 农场 / 清理 ---
     "auto_kill_bad": True,
     "clean_interval_min": 120,

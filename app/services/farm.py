@@ -7,10 +7,20 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from app.config import CPA_DIR, DATA_DIR, load_config, save_config
+from app.config import CPA_DIR, DATA_DIR, app_dir, load_config, save_config
 from app.services.pool import clean_pool, import_cpa_dir, pool_overview, summarize_quota
 from app.services.register_bridge import run_external_register
 from app.services.sub2api import Sub2ApiClient
+
+
+def _resolve_cwd(cwd: str) -> str:
+    """external_register_cwd 相对 app_dir 解析(支持 vendor/grok-register 相对路径)。"""
+    if not cwd:
+        return ""
+    p = Path(cwd)
+    if not p.is_absolute():
+        p = app_dir() / cwd
+    return str(p)
 
 LogCb = Optional[Callable[[str], None]]
 StateCb = Optional[Callable[[dict], None]]
@@ -90,20 +100,19 @@ class FarmController:
                     client = self._client(cfg)
                     client.login()
                     if cfg.get("register_enabled") and cfg.get("external_register_cmd"):
+                        _cwd = _resolve_cwd(cfg.get("external_register_cwd") or "")
                         run_external_register(
                             cmd=cfg["external_register_cmd"],
-                            cwd=cfg.get("external_register_cwd") or "",
+                            cwd=_cwd,
                             count=int(cfg.get("register_count") or 3),
-                            config_path=str(Path(cfg.get("external_register_cwd") or "") / "config.json")
-                            if cfg.get("external_register_cwd")
-                            else "",
+                            config_path=str(Path(_cwd) / "config.json") if _cwd else "",
                             log=log,
                             silent=bool(cfg.get("register_silent", True)),
                         )
                     cpa_dir = Path(cfg.get("cpa_dir") or CPA_DIR)
-                    # 若外部注册写到别的目录，允许配置覆盖；默认 data/cpa_auths
-                    if cfg.get("external_register_cwd"):
-                        ext = Path(cfg["external_register_cwd"]) / "cpa_auths"
+                    _icwd = _resolve_cwd(cfg.get("external_register_cwd") or "")
+                    if _icwd:
+                        ext = Path(_icwd) / "cpa_auths"
                         if ext.exists():
                             cpa_dir = ext
                     stats = import_cpa_dir(
@@ -149,8 +158,9 @@ class FarmController:
         client = self._client(cfg)
         client.login()
         cpa_dir = Path(cfg.get("cpa_dir") or CPA_DIR)
-        if cfg.get("external_register_cwd"):
-            ext = Path(cfg["external_register_cwd"]) / "cpa_auths"
+        _icwd = _resolve_cwd(cfg.get("external_register_cwd") or "")
+        if _icwd:
+            ext = Path(_icwd) / "cpa_auths"
             if ext.exists():
                 cpa_dir = ext
         return import_cpa_dir(

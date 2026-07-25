@@ -28,3 +28,15 @@ dist/
 # OS
 Thumbs.db
 .DS_Store
+
+# vendor/grok-register 运行时产物(源码进git, 这些不进)
+vendor/grok-register/.venv/
+vendor/grok-register/cpa_auths/
+vendor/grok-register/config.json
+vendor/grok-register/accounts_*.txt
+vendor/grok-register/*.log
+vendor/grok-register/*_state.json
+vendor/grok-register/*.lock
+vendor/grok-register/screenshots/
+vendor/grok-register/mail_credentials.txt
+vendor/grok-register/**/__pycache__/
