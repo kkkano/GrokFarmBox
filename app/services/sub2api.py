@@ -82,27 +82,52 @@ class Sub2ApiClient:
         only_suffix: str = "",
         only_active: bool = False,
     ) -> list[dict]:
+        """列出账号。先拉第 1 页拿 total, 再并发拉剩余页, 避免串行超时像「按钮没反应」。"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         self.login()
-        out: list[dict] = []
-        page = 1
-        while page <= max_pages:
-            data = self._req(
-                "get",
-                f"/api/v1/admin/accounts?platform={platform}&page={page}&page_size={page_size}",
-                timeout=60,
-            ).get("data") or {}
-            items = data.get("items") or []
-            for it in items:
+
+        def _fetch(page: int) -> dict:
+            last_err: Exception | None = None
+            for attempt in range(3):
+                try:
+                    return self._req(
+                        "get",
+                        f"/api/v1/admin/accounts?platform={platform}&page={page}&page_size={page_size}",
+                        timeout=45,
+                    ).get("data") or {}
+                except Exception as e:
+                    last_err = e
+                    time.sleep(0.4 * (attempt + 1))
+            raise Sub2ApiError(f"list_accounts page={page} 失败: {last_err}")
+
+        def _filter(items: list) -> list[dict]:
+            out: list[dict] = []
+            for it in items or []:
                 nm = str(it.get("name") or "")
                 if only_suffix and not nm.endswith(only_suffix):
                     continue
                 if only_active and it.get("status") != "active":
                     continue
                 out.append(it)
-            total = int(data.get("total") or 0)
-            if page * page_size >= total:
-                break
-            page += 1
+            return out
+
+        first = _fetch(1)
+        total = int(first.get("total") or 0)
+        pages = max(1, min(max_pages, (total + page_size - 1) // page_size if total else 1))
+        by_page: dict[int, list] = {1: _filter(first.get("items") or [])}
+
+        if pages > 1:
+            with ThreadPoolExecutor(max_workers=min(8, pages - 1)) as ex:
+                futs = {ex.submit(_fetch, p): p for p in range(2, pages + 1)}
+                for fut in as_completed(futs):
+                    p = futs[fut]
+                    data = fut.result()
+                    by_page[p] = _filter(data.get("items") or [])
+
+        out: list[dict] = []
+        for p in range(1, pages + 1):
+            out.extend(by_page.get(p) or [])
         return out
 
     def import_oauth_account(

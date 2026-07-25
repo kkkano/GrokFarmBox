@@ -187,7 +187,15 @@ async function doTestConn() {
 
 async function doOverview() {
   const r = await run($("#btn-overview"), "拉取中…", () => api().overview());
-  if (r && r.ok) { applyOverview(r.overview); toast("概况已刷新", "ok"); }
+  if (!r) return;
+  if (r.ok) {
+    applyOverview(r.overview);
+    const n = r.overview?.safe_active ?? r.overview?.safe_total ?? 0;
+    const approx = r.overview?.approx ? "（轻量统计）" : "";
+    toast(`概况已刷新 · 可用约 ${n}${approx}`, "ok");
+  } else {
+    toast("拉取失败: " + (r.error || "超时/网络错误"), "bad");
+  }
 }
 
 // 静默自动刷新：只在仪表盘页、无按钮 loading 时，后台更新 KPI/账号列表（不打扰、不弹 toast）

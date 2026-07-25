@@ -85,11 +85,12 @@ def import_cpa_dir(
     auto_kill_bad: bool = True,
     log: LogCb = None,
 ) -> dict:
-    """扫描 cpa 目录，导入未存在的账号，可选测活+杀坏号。"""
-    known = {
-        str(a.get("name") or "")
-        for a in client.list_accounts(platform="grok", only_suffix=safe_suffix)
-    }
+    """扫描 cpa 目录并导入。
+
+    不再整池 list_accounts 查重(号多时会卡死 UI/农场)。
+    重复号由 sub2api 返回错误后跳过; 本轮内存 known 防重复文件。
+    """
+    known: set[str] = set()
     files = load_cpa_files(cpa_dir)
     stats = {"scanned": len(files), "imported": 0, "skipped": 0, "deleted": 0, "failed": 0, "items": []}
     for src in files:
@@ -134,8 +135,16 @@ def import_cpa_dir(
                 _log(log, f"导入成功(未测): {email} id={aid}")
             stats["items"].append(item)
         except Exception as e:
+            err = str(e)
+            low = err.lower()
+            # 已存在/重复: 当跳过, 不记 failed
+            if any(k in low for k in ("already", "exist", "duplicate", "冲突", "已存在", "unique", "409")):
+                stats["skipped"] += 1
+                known.add(email)
+                _log(log, f"已存在跳过: {email}")
+                continue
             stats["failed"] += 1
-            stats["items"].append({"email": email, "ok": False, "error": str(e)[:200]})
+            stats["items"].append({"email": email, "ok": False, "error": err[:200]})
             _log(log, f"导入失败 {email}: {e}")
     return stats
 
@@ -258,17 +267,44 @@ def summarize_quota(
 
 
 def pool_overview(client: Sub2ApiClient, safe_suffix: str = "") -> dict[str, Any]:
-    all_acc = client.list_accounts(platform="grok")
-    safe = [a for a in all_acc if str(a.get("name") or "").endswith(safe_suffix)] if safe_suffix else all_acc
-    other = [a for a in all_acc if a not in safe]
-    by_status: dict[str, int] = {}
-    for a in safe:
-        st = str(a.get("status") or "unknown")
-        by_status[st] = by_status.get(st, 0) + 1
+    """号池概况(轻量, 秒回)。
+
+    只拉 platform=grok 第 1 页:
+    - total 用接口 total
+    - safe_active 用本页 active 比例粗估(避免 status=active 过滤在 sub2api 上超时)
+    - accounts 用本页匹配后缀号
+    """
+    client.login()
+    data = client._req(
+        "get",
+        "/api/v1/admin/accounts?platform=grok&page=1&page_size=50",
+        timeout=45,
+    ).get("data") or {}
+    total = int(data.get("total") or 0)
+    items = data.get("items") or []
+    if safe_suffix:
+        accounts = [a for a in items if str(a.get("name") or "").endswith(safe_suffix)]
+        other_in_page = len(items) - len(accounts)
+    else:
+        accounts = list(items)
+        other_in_page = 0
+    active_in_page = sum(1 for a in accounts if a.get("status") == "active")
+    # 用本页 active 比例估算全池可用数
+    if accounts:
+        ratio = active_in_page / max(1, len(accounts))
+        safe_active = int(round(total * ratio)) if not other_in_page else active_in_page
+    else:
+        safe_active = 0
+    try:
+        accounts = sorted(accounts, key=lambda x: int(x.get("id") or 0), reverse=True)
+    except Exception:
+        pass
     return {
-        "safe_total": len(safe),
-        "other_total": len(other),
-        "by_status": by_status,
-        "safe_active": by_status.get("active", 0),
-        "accounts": safe,
+        "safe_total": total if not other_in_page else max(0, total - other_in_page),
+        "other_total": other_in_page,
+        "by_status": {"active": safe_active},
+        "safe_active": safe_active,
+        "accounts": accounts[:50],
+        "listed": min(50, len(accounts)),
+        "approx": True,
     }
