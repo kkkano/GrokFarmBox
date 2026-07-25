@@ -185,6 +185,10 @@ async function silentRefresh() {
   try {
     const r = await api().overview();
     if (r && r.ok) applyOverview(r.overview);
+    const s = await api().farm_state();
+    setFarmButtons(!!s.running);
+    const f = $("#kpi-farm");
+    if (f) { f.textContent = s.running ? "运行中" : "停止"; f.className = "val" + (s.running ? " accent" : ""); }
   } catch (_) {}
 }
 
@@ -228,14 +232,20 @@ async function doSmoke() {
   }
 }
 
+function setFarmButtons(running) {
+  const start = $("#btn-farm-start"), stop = $("#btn-farm-stop");
+  if (start) start.disabled = !!running;
+  if (stop) stop.disabled = !running;
+}
 async function doFarmStart() {
-  const r = await api().start_farm().catch(e => ({ ok: false, error: String(e) }));
-  toast(r && r.ok ? "农场循环已启动" : "启动失败", r && r.ok ? "ok" : "bad");
-  setKpi("kpi-farm", "运行中", "accent");
+  const r = await run($("#btn-farm-start"), "启动中…", () => api().start_farm());
+  if (r && r.ok) { toast("农场循环已启动", "ok"); setKpi("kpi-farm", "运行中", "accent"); setFarmButtons(true); }
+  else { toast("启动失败", "bad"); }
 }
 async function doFarmStop() {
-  await api().stop_farm();
+  await run($("#btn-farm-stop"), "停止中…", () => api().stop_farm());
   setKpi("kpi-farm", "停止");
+  setFarmButtons(false);
   toast("已请求停止农场");
 }
 
@@ -365,6 +375,7 @@ async function boot() {
   await refreshConnBar();
   await loadCfgToForm();
   await loadGuide();
+  try { const s = await api().farm_state(); setFarmButtons(!!s.running); if (s.running) setKpi("kpi-farm", "运行中", "accent"); } catch (_) {}
   setInterval(silentRefresh, 60000);  // 每 60 秒静默刷新仪表盘数字
 }
 
