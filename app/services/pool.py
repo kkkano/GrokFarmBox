@@ -300,44 +300,49 @@ def summarize_quota(
 
 
 def pool_overview(client: Sub2ApiClient, safe_suffix: str = "") -> dict[str, Any]:
-    """号池概况(轻量, 秒回)。
-
-    只拉 platform=grok 第 1 页:
-    - total 用接口 total
-    - safe_active 用本页 active 比例粗估(避免 status=active 过滤在 sub2api 上超时)
-    - accounts 用本页匹配后缀号
-    """
+    """号池概况(轻量, 秒回)。优先用 status=active 的准确 total, 超时则用第1页估算。"""
     client.login()
-    data = client._req(
-        "get",
-        "/api/v1/admin/accounts?platform=grok&page=1&page_size=50",
-        timeout=45,
-    ).get("data") or {}
-    total = int(data.get("total") or 0)
-    items = data.get("items") or []
+
+    def _page(status: str = "", page_size: int = 50) -> dict:
+        qs = f"/api/v1/admin/accounts?platform=grok&page=1&page_size={page_size}"
+        if status:
+            qs += f"&status={status}"
+        return client._req("get", qs, timeout=45).get("data") or {}
+
+    # 优先: status=active 准确 total
+    active_total = None
+    try:
+        ad = _page(status="active", page_size=5)
+        active_total = int(ad.get("total") or 0)
+    except Exception:
+        active_total = None  # 超时则fallback
+
+    all_data = _page(page_size=50)
+    total = int(all_data.get("total") or 0)
+    items = all_data.get("items") or []
     if safe_suffix:
         accounts = [a for a in items if str(a.get("name") or "").endswith(safe_suffix)]
         other_in_page = len(items) - len(accounts)
     else:
         accounts = list(items)
         other_in_page = 0
-    active_in_page = sum(1 for a in accounts if a.get("status") == "active")
-    # 用本页 active 比例估算全池可用数
-    if accounts:
-        ratio = active_in_page / max(1, len(accounts))
-        safe_active = int(round(total * ratio)) if not other_in_page else active_in_page
-    else:
-        safe_active = 0
+
+    if active_total is None:
+        # fallback: 第1页 active 比例估算(可能不准, 标记 approx)
+        active_in_page = sum(1 for a in accounts if a.get("status") == "active")
+        ratio = active_in_page / max(1, len(accounts)) if accounts else 0
+        active_total = int(round(total * ratio))
+
     try:
         accounts = sorted(accounts, key=lambda x: int(x.get("id") or 0), reverse=True)
     except Exception:
         pass
     return {
-        "safe_total": total if not other_in_page else max(0, total - other_in_page),
+        "safe_total": total,
         "other_total": other_in_page,
-        "by_status": {"active": safe_active},
-        "safe_active": safe_active,
+        "by_status": {"active": active_total},
+        "safe_active": active_total,
         "accounts": accounts[:50],
         "listed": min(50, len(accounts)),
-        "approx": True,
+        "approx": active_total is None,  # True=估算(可能不准), False=准确
     }
