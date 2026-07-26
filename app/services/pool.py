@@ -232,6 +232,43 @@ def clean_pool(
     return {"total": len(items), "kept": kept, "paused": paused, "deleted": deleted, "details": details}
 
 
+def purge_dead_accounts(
+    client: Sub2ApiClient,
+    status: str = "error",
+    concurrency: int = 12,
+    log: LogCb = None,
+) -> dict:
+    """批量删除指定 status 的账号(默认 error = refresh token revoked 死号)。
+
+    与 clean_pool 不同: 不测活, 直接按 status 清空。status=error 的号已被 sub2api
+    判定 refresh 失败(invalid_grant / token revoked), 是死透的, 安全删。
+    """
+    ids = client.list_ids_by_status(platform="grok", status=status)
+    _log(log, f"待清理 status={status} 死号: {len(ids)}")
+    deleted = failed = 0
+
+    def one(aid):
+        try:
+            client.delete_account(aid)
+            return True
+        except Exception:
+            return False
+
+    if ids:
+        with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
+            futs = {ex.submit(one, i): i for i in ids}
+            done = 0
+            for f in as_completed(futs):
+                done += 1
+                if f.result():
+                    deleted += 1
+                else:
+                    failed += 1
+                if done % 200 == 0 or done == len(ids):
+                    _log(log, f"清理进度 {done}/{len(ids)} 删={deleted} 失败={failed}")
+    return {"status": status, "total": len(ids), "deleted": deleted, "failed": failed}
+
+
 def summarize_quota(
     client: Sub2ApiClient,
     safe_suffix: str = "",

@@ -172,6 +172,18 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def purge_error(self, opts: dict = None) -> dict:
+        try:
+            status = (opts or {}).get("status") or "error"
+            stats = self.farm.once_purge_dead(log=self._logcb(), status=status)
+            self._log(
+                f"清理死号({status})完成: 删除 {stats.get('deleted')} / 失败 {stats.get('failed')}",
+                "ok",
+            )
+            return {"ok": True, "stats": stats}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def quota(self) -> dict:
         try:
             return {"ok": True, "quota": self.farm.once_quota(log=self._logcb())}

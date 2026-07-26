@@ -191,6 +191,19 @@ class FarmController:
             log=log,
         )
 
+    def once_purge_dead(self, log: LogCb = None, status: str = "error") -> dict:
+        """一键清理死号(默认 status=error, refresh token revoked 的尸体)。"""
+        from app.services.pool import purge_dead_accounts
+        cfg = load_config()
+        client = self._client(cfg)
+        client.login()
+        return purge_dead_accounts(
+            client=client,
+            status=status,
+            concurrency=int(cfg.get("test_concurrency") or 12),
+            log=log,
+        )
+
     def once_overview(self) -> dict:
         cfg = load_config()
         client = self._client(cfg)

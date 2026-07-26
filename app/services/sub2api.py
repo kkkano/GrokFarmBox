@@ -167,6 +167,28 @@ class Sub2ApiClient:
         self.login()
         self._req("delete", f"/api/v1/admin/accounts/{account_id}")
 
+    def list_ids_by_status(
+        self, platform: str = "grok", status: str = "error", page_size: int = 100, max_pages: int = 60
+    ) -> list:
+        """拉取指定 status 的全部账号 id(批量清理死号用)。"""
+        self.login()
+        ids = []
+        page = 1
+        while page <= max_pages:
+            d = self._req(
+                "get",
+                f"/api/v1/admin/accounts?platform={platform}&status={status}&page={page}&page_size={page_size}",
+                timeout=45,
+            ).get("data") or {}
+            items = d.get("items") or []
+            if not items:
+                break
+            ids.extend(it.get("id") for it in items if it.get("id") is not None)
+            if len(items) < page_size:
+                break
+            page += 1
+        return ids
+
     def test_account(self, account_id: int | str) -> dict:
         """调用管理端 test 接口，返回 {ok, text, status}。"""
         self.login()
@@ -190,6 +212,9 @@ class Sub2ApiClient:
             "forbidden",
             "unauthorized",
             "access to the chat endpoint is denied",
+            "invalid_grant",
+            "refresh token has been revoked",
+            "token refresh failed",
         ]
         # 冷却(额度用尽/限流): 可选杀或标记暂停
         cooldown_keys = [

@@ -249,6 +249,20 @@ async function doClean() {
   }
 }
 
+async function doPurgeError() {
+  if (!confirm("确认清理所有 status=error 的死号？\n这些是 refresh token 被 xAI 吊销的尸体(refresh failed / invalid_grant)，按状态批量删除，不可恢复。")) return;
+  const r = await run($("#btn-purge-error"), "清理死号中…", () => api().purge_error({ status: "error" }));
+  if (!r) return;
+  if (r.ok) {
+    const s = r.stats;
+    toast(`死号清理完成：删除 ${s.deleted} / 失败 ${s.failed || 0}`, "ok");
+    const ov = await api().overview().catch(() => null);
+    if (ov && ov.ok) applyOverview(ov.overview);
+  } else {
+    toast("清理失败: " + (r.error || ""), "bad");
+  }
+}
+
 async function doQuota() {
   const r = await run($("#btn-quota"), "抽样中…", () => api().quota());
   if (r && r.ok) {
@@ -401,6 +415,7 @@ function bind() {
   $("#btn-overview").addEventListener("click", doOverview);
   $("#btn-import").addEventListener("click", doImport);
   $("#btn-clean").addEventListener("click", doClean);
+  $("#btn-purge-error").addEventListener("click", doPurgeError);
   $("#btn-quota").addEventListener("click", doQuota);
   $("#btn-smoke").addEventListener("click", doSmoke);
   $("#btn-farm-start").addEventListener("click", doFarmStart);
