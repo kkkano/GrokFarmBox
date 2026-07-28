@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from app.config import CPA_DIR, DATA_DIR, app_dir, load_config, save_config
-from app.services.pool import clean_pool, import_cpa_dir, pool_overview, summarize_quota
+from app.services.pool import clean_pool, import_cpa_dir, pool_overview, retest_isolated_accounts, summarize_quota
 from app.services.register_bridge import run_external_register
 from app.services.sub2api import Sub2ApiClient
 
@@ -99,6 +99,12 @@ class FarmController:
                 try:
                     client = self._client(cfg)
                     client.login()
+                    # 趋势采样放在 LOOP 开头(login 后/注册前), 避免注册卡住导致整轮无点
+                    try:
+                        from app.services import trend as _trend
+                        _trend.append_trend(client)
+                    except Exception:
+                        pass
                     if cfg.get("register_enabled") and cfg.get("external_register_cmd"):
                         _cwd = _resolve_cwd(cfg.get("external_register_cwd") or "")
                         run_external_register(
@@ -133,6 +139,19 @@ class FarmController:
                         stats.get("deleted") or 0
                     )
                     self.state["last_error"] = ""
+                    # 延迟复测: 对冷却/临时隔离账号到期后重新测活
+                    try:
+                        rt = retest_isolated_accounts(
+                            client=client,
+                            retest_delay_hours=int(cfg.get("retest_delay_hours") or 6),
+                            concurrency=int(cfg.get("test_concurrency") or 8),
+                            auto_kill_bad=bool(cfg.get("auto_kill_bad", True)),
+                            log=log,
+                        )
+                        if rt.get("activated"):
+                            self.state["retest_activated"] = int(self.state.get("retest_activated") or 0) + rt["activated"]
+                    except Exception:
+                        pass
                 except Exception as e:
                     self.state["last_error"] = str(e)
                     if log:
@@ -208,6 +227,19 @@ class FarmController:
         cfg = load_config()
         client = self._client(cfg)
         client.login()
+        # 采样放到后台线程, 不挡 overview 返回(避免打开/刷新变慢)
+        try:
+            from app.services import trend as _trend
+
+            def _bg():
+                try:
+                    _trend.append_trend(client)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_bg, name="trend-sample", daemon=True).start()
+        except Exception:
+            pass
         return pool_overview(client, safe_suffix=cfg.get("sub2api_safe_suffix") or "")
 
     def once_quota(self, log: LogCb = None) -> dict:

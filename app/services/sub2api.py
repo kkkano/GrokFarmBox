@@ -138,7 +138,9 @@ class Sub2ApiClient:
         proxy_id: int = 0,
         notes: str = "GrokFarmBox",
         concurrency: int = 5,
+        schedulable: bool = False,
     ) -> dict:
+        """导入 OAuth 账号，默认隔离（schedulable=false），防止未验证号进入调度池。"""
         self.login()
         body = {
             "name": email,
@@ -151,6 +153,7 @@ class Sub2ApiClient:
             "concurrency": concurrency,
             "priority": 1,
             "auto_pause_on_expired": True,
+            "schedulable": schedulable,
         }
         data = self._req("post", "/api/v1/admin/accounts", json=body)
         aid = (data.get("data") or {}).get("id")
@@ -190,7 +193,10 @@ class Sub2ApiClient:
         return ids
 
     def test_account(self, account_id: int | str) -> dict:
-        """调用管理端 test 接口，返回 {ok, text, status}。"""
+        """调用管理端 test 接口，返回 {ok, text, status, permanent, cooldown, transient}。
+
+        永久失效仅限明确的 credential 吊销/缺失，不包含普通 401/403。
+        """
         self.login()
         url = f"{self.base}/api/v1/admin/accounts/{account_id}/test"
         try:
@@ -202,21 +208,32 @@ class Sub2ApiClient:
             )
             text = r.text or ""
         except Exception as e:
-            # 超时/网络异常: 当冷却(保守不杀), 避免误杀慢号
-            return {"ok": False, "text": f"timeout/err: {e}", "status": 0, "hard_fail": False, "permanent": False, "cooldown": True}
+            return {
+                "ok": False,
+                "text": f"timeout/err: {e}",
+                "status": 0,
+                "hard_fail": False,
+                "permanent": False,
+                "cooldown": False,
+                "transient": True,
+            }
         low = text.lower()
-        # 永久失效(权限没了/号被删): 必杀
+
+        # 永久失效：仅限明确凭证吊销/缺失，不包含普通 401/403
         permanent_keys = [
-            "permission-denied",
-            "runtime has been deleted",
-            "forbidden",
-            "unauthorized",
-            "access to the chat endpoint is denied",
             "invalid_grant",
             "refresh token has been revoked",
-            "token refresh failed",
+            "refresh_token_reused",
+            "refresh_token_invalidated",
+            "app_session_terminated",
         ]
-        # 冷却(额度用尽/限流): 可选杀或标记暂停
+        # 缺失凭证
+        missing_keys = [
+            "credentials are missing",
+            "refresh token is missing",
+            "access token is missing",
+        ]
+        # 冷却/额度
         cooldown_keys = [
             "spending-limit",
             "payment required",
@@ -228,23 +245,66 @@ class Sub2ApiClient:
             "rate-limit",
             "too many requests",
         ]
-        permanent = any(k in low for k in permanent_keys) or r.status_code in (401, 403)
+        # 临时/可恢复
+        transient_keys = [
+            "timeout",
+            "deadline exceeded",
+            "connection reset",
+            "temporarily",
+            "try again",
+            "server error",
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+        ]
+
+        permanent = any(k in low for k in permanent_keys + missing_keys)
         cooldown = any(k in low for k in cooldown_keys) or r.status_code in (402, 429)
+        transient = any(k in low for k in transient_keys) or r.status_code in (500, 502, 503, 504)
+
         soft_ok = r.status_code < 400 and '"type":"error"' not in text.replace(" ", "")
-        ok = soft_ok and not permanent and not cooldown
+        ok = soft_ok and not permanent and not cooldown and not transient
+
         return {
             "ok": ok,
             "text": text[:400],
             "status": r.status_code,
-            "hard_fail": permanent,  # 兼容旧字段: 永久失效=hard
+            "hard_fail": permanent,
             "permanent": permanent,
             "cooldown": cooldown,
+            "transient": transient and not permanent and not cooldown,
         }
 
     def set_account_status(self, account_id: int | str, status: str) -> None:
         """设置账号状态(active/inactive/error)。冷却号可设 inactive 暂停, 不删。"""
         self.login()
         self._req("put", f"/api/v1/admin/accounts/{account_id}", json={"status": status})
+
+    def activate_after_test(self, account_id: int | str) -> None:
+        """测活成功后激活：status=active + schedulable=true，进入调度池。"""
+        self.login()
+        self._req(
+            "post",
+            "/api/v1/admin/accounts/bulk-update",
+            json={
+                "account_ids": [int(account_id)],
+                "status": "active",
+                "schedulable": True,
+            },
+        )
+
+    def isolate_after_failure(self, account_id: int | str, reason: str = "") -> None:
+        """测活失败后隔离：status=inactive + schedulable=false，不进入调度池。"""
+        self.login()
+        self._req(
+            "post",
+            "/api/v1/admin/accounts/bulk-update",
+            json={
+                "account_ids": [int(account_id)],
+                "status": "inactive",
+                "schedulable": False,
+            },
+        )
 
     def get_usage_snapshot(self, account_id: int | str) -> dict:
         """尽量读取账号额度快照（字段因 sub2api 版本而异）。"""

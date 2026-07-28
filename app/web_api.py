@@ -56,6 +56,7 @@ INT_KEYS = {
     "test_concurrency",
     "max_tokens_probe",
     "clean_interval_min",
+    "retest_delay_hours",
 }
 
 
@@ -181,6 +182,16 @@ class Api:
                 "ok",
             )
             return {"ok": True, "stats": stats}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def trend(self, opts: dict = None) -> dict:
+        try:
+            from app.services import trend as trend_mod
+            r = (opts or {}).get("range") or "24h"
+            ranges = {"24h": 86400, "week": 604800, "month": 2592000, "all": 0}
+            pts = trend_mod.read_trend(ranges.get(r, 86400))
+            return {"ok": True, "range": r, "count": len(pts), "points": pts}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 

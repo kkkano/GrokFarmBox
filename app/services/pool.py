@@ -11,10 +11,120 @@ from app.services.sub2api import Sub2ApiClient
 
 LogCb = Optional[Callable[[str], None]]
 
+RETEST_QUEUE_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "retest_queue.jsonl"
+
 
 def _log(cb: LogCb, msg: str) -> None:
     if cb:
         cb(msg)
+
+
+def _retest_queue_append(account_id: int, email: str, reason: str) -> None:
+    """将冷却/临时失败的账号加入延迟复测队列。"""
+    try:
+        RETEST_QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        entry = {"id": account_id, "email": email, "reason": reason, "isolated_at": time.time()}
+        with RETEST_QUEUE_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _retest_queue_read() -> list[dict]:
+    """读取复测队列文件。"""
+    if not RETEST_QUEUE_FILE.exists():
+        return []
+    entries = []
+    try:
+        for line in RETEST_QUEUE_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    except Exception:
+        return []
+    return entries
+
+
+def _retest_queue_write(entries: list[dict]) -> None:
+    """重写复测队列文件。"""
+    try:
+        RETEST_QUEUE_FILE.write_text(
+            "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def retest_isolated_accounts(
+    client: Sub2ApiClient,
+    retest_delay_hours: int = 6,
+    concurrency: int = 8,
+    auto_kill_bad: bool = True,
+    log: LogCb = None,
+) -> dict:
+    """对延迟复测队列中到期的账号重新测活。
+
+    - 成功: 开放调度
+    - 永久失效: 删除
+    - 仍冷却/临时: 更新隔离时间, 等待下次复测
+    """
+    entries = _retest_queue_read()
+    now = time.time()
+    due = [e for e in entries if now - e.get("isolated_at", 0) >= retest_delay_hours * 3600]
+    not_due = [e for e in entries if now - e.get("isolated_at", 0) < retest_delay_hours * 3600]
+
+    _log(log, f"复测队列: 到期={len(due)}, 等待={len(not_due)}")
+    if not due:
+        return {"due": 0, "not_due": len(not_due), "activated": 0, "deleted": 0, "re_isolated": 0}
+
+    activated = deleted = re_isolated = 0
+
+    def one(entry: dict) -> str:
+        nonlocal activated, deleted, re_isolated
+        aid = entry.get("id")
+        try:
+            t = client.test_account(aid)
+        except Exception:
+            re_isolated += 1
+            return "error"
+        if t.get("ok"):
+            try:
+                client.activate_after_test(aid)
+            except Exception:
+                pass
+            activated += 1
+            return "activated"
+        if t.get("permanent") and auto_kill_bad:
+            try:
+                client.delete_account(aid)
+            except Exception:
+                pass
+            deleted += 1
+            return "deleted"
+        entry["isolated_at"] = now
+        entry["reason"] = t.get("text", "")[:200]
+        re_isolated += 1
+        return "re_isolated"
+
+    if due:
+        with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
+            futs = {ex.submit(one, e): e for e in due}
+            done = 0
+            for f in as_completed(futs):
+                done += 1
+                f.result()
+                if done % 20 == 0 or done == len(due):
+                    _log(log, f"复测进度 {done}/{len(due)} 激活={activated} 删={deleted} 再隔离={re_isolated}")
+
+    remaining = not_due + [e for e in due if e.get("isolated_at") == now]
+    _retest_queue_write(remaining)
+
+    return {"due": len(due), "not_due": len(not_due), "activated": activated, "deleted": deleted, "re_isolated": re_isolated}
 
 
 def build_credentials_from_cpa(src: dict) -> dict:
@@ -27,7 +137,8 @@ def build_credentials_from_cpa(src: dict) -> dict:
         "id_token": src.get("id_token", ""),
         "token_type": src.get("token_type", "Bearer"),
         "expires_in": exp_ts,
-        "expires_at": src.get("expired")
+        "expires_at": src.get("expires_at")
+        or src.get("expired")
         or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + exp_ts)),
         "base_url": src.get("base_url", "https://cli-chat-proxy.grok.com/v1"),
         "client_id": src.get("client_id", "b1a00492-073a-47ea-816f-4c329264a828"),
@@ -120,38 +231,31 @@ def import_cpa_dir(
                 t = client.test_account(aid)
                 item["test_ok"] = t.get("ok")
                 item["test"] = t.get("text", "")[:120]
-                if t.get("permanent"):  # 永久失效: 必删
+                if t.get("ok"):  # 成功: 开放调度
+                    client.activate_after_test(aid)
+                    stats["imported"] += 1; known.add(email)
+                    _log(log, f"导入成功: {email} id={aid}")
+                elif t.get("permanent"):  # 永久失效: 必删
                     client.delete_account(aid)
                     item["deleted"] = True
                     stats["deleted"] += 1
                     _move_cpa_to_dead(src.get("_file"))
                     _log(log, f"导入后永久失效已删: {email}")
-                elif t.get("cooldown"):  # 冷却(额度用尽/限流)
-                    if kill_on_cooldown:
-                        client.delete_account(aid)
-                        item["deleted"] = True; stats["deleted"] += 1
-                        _move_cpa_to_dead(src.get("_file"))
-                        _log(log, f"导入后冷却已删: {email}")
-                    else:
-                        client.set_account_status(aid, "inactive")
-                        stats["imported"] += 1; known.add(email)
-                        _log(log, f"导入成功(冷却暂停): {email}")
-                elif not t.get("ok"):  # 其它失败
-                    if kill_on_cooldown:
-                        client.delete_account(aid)
-                        item["deleted"] = True; stats["deleted"] += 1
-                        _move_cpa_to_dead(src.get("_file"))
-                        _log(log, f"导入后测活失败已删: {email}")
-                    else:
-                        stats["imported"] += 1; known.add(email)
-                        _log(log, f"导入成功(测活未过保留): {email}")
-                else:
+                elif t.get("cooldown") or t.get("transient"):  # 额度/临时: 隔离保留
+                    client.isolate_after_failure(aid, reason=t.get("text", ""))
+                    _retest_queue_append(aid, email, t.get("text", ""))
                     stats["imported"] += 1; known.add(email)
-                    _log(log, f"导入成功: {email} id={aid}")
+                    _log(log, f"导入成功(冷却/临时隔离): {email}")
+                else:  # 其它失败: 隔离保留, 不删
+                    client.isolate_after_failure(aid, reason=t.get("text", ""))
+                    _retest_queue_append(aid, email, t.get("text", ""))
+                    stats["imported"] += 1; known.add(email)
+                    _log(log, f"导入成功(测活未过隔离): {email}")
             else:
+                # 不测活: 保持隔离状态, 等待后续 clean_pool 或手动测活
                 stats["imported"] += 1
                 known.add(email)
-                _log(log, f"导入成功(未测): {email} id={aid}")
+                _log(log, f"导入成功(隔离未测): {email} id={aid}")
             stats["items"].append(item)
         except Exception as e:
             err = str(e)
@@ -198,7 +302,12 @@ def clean_pool(
                 client.delete_account(aid); row["deleted"] = True
             except Exception as e:
                 row["delete_err"] = str(e)[:80]
-        elif t.get("cooldown"):  # 冷却(额度用尽/限流)
+        elif t.get("ok"):  # 成功: 开放调度
+            try:
+                client.activate_after_test(aid)
+            except Exception as e:
+                row["activate_err"] = str(e)[:80]
+        elif t.get("cooldown") or t.get("transient"):  # 额度/临时: 隔离保留
             if kill_on_cooldown:
                 try:
                     client.delete_account(aid); row["deleted"] = True
@@ -206,15 +315,16 @@ def clean_pool(
                     row["delete_err"] = str(e)[:80]
             else:
                 try:
-                    client.set_account_status(aid, "inactive"); row["paused"] = True
+                    client.isolate_after_failure(aid, reason=t.get("text", ""))
+                    row["paused"] = True
                 except Exception as e:
                     row["pause_err"] = str(e)[:80]
-        elif not t.get("ok"):  # 其它失败(非永久非冷却)
-            if kill_on_cooldown:
-                try:
-                    client.delete_account(aid); row["deleted"] = True
-                except Exception as e:
-                    row["delete_err"] = str(e)[:80]
+        elif not t.get("ok"):  # 其它失败: 隔离保留, 不删
+            try:
+                client.isolate_after_failure(aid, reason=t.get("text", ""))
+                row["paused"] = True
+            except Exception as e:
+                row["pause_err"] = str(e)[:80]
         return row
 
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
@@ -238,10 +348,11 @@ def purge_dead_accounts(
     concurrency: int = 12,
     log: LogCb = None,
 ) -> dict:
-    """批量删除指定 status 的账号(默认 error = refresh token revoked 死号)。
+    """批量删除指定 status 的账号(默认 error)。
 
-    与 clean_pool 不同: 不测活, 直接按 status 清空。status=error 的号已被 sub2api
-    判定 refresh 失败(invalid_grant / token revoked), 是死透的, 安全删。
+    ⚠️ 注意: 并非所有 error 账号都是真死号。旧版 sub2api 可能因缺少 Grok CLI
+    请求头而把正常账号误标为 error。建议先用 clean_pool 测活确认后再清理,
+    或确保 sub2api 已升级到包含 PR #4009 的版本。
     """
     ids = client.list_ids_by_status(platform="grok", status=status)
     _log(log, f"待清理 status={status} 死号: {len(ids)}")

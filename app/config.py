@@ -48,6 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "auto_kill_bad": True,
     "kill_on_cooldown": False,  # 冷却号(额度用尽/限流)也删; False=只设inactive暂停等恢复. 永久失效号始终删
     "import_test_after": False,  # 导入时是否测活(调grok占用上游, 业务高峰建议关, 靠failover+定期清理)
+    "retest_delay_hours": 6,  # 冷却/临时失败账号的延迟复测间隔(小时)
     "clean_interval_min": 120,
     "test_concurrency": 8,
     "test_model": "grok-4.5",
